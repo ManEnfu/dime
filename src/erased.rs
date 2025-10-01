@@ -1,3 +1,5 @@
+//! Utilites around opaque values with erased type informations.
+
 use std::any::Any;
 
 /// [`CloneBoxed`] is a trait to clone a reference to an `?Sized` type into a [`Box`].
