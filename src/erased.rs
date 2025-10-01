@@ -27,6 +27,7 @@ impl Erased {
     /// Creates a new `Erased` with the provided `value` of type `T`.
     ///
     /// `T` must be `'static` implement [`Clone`], [`Send`], and [`Sync`].
+    #[must_use]
     pub fn new<T>(value: T) -> Self
     where
         T: Clone + Send + Sync + 'static,
@@ -36,14 +37,16 @@ impl Erased {
 
     /// Tries to downcast `self` into type `T`.
     ///
-    /// if the underlying value is not of type `T`, this method will return
+    /// # Errors
+    ///
+    /// If the underlying value is not of type `T`, this method will return
     /// itself as error.
-    #[allow(clippy::missing_panics_doc)]
     pub fn downcast<T>(self) -> Result<T, Self>
     where
         T: Clone + Send + Sync + 'static,
     {
         if (&*self.0 as &dyn Any).is::<T>() {
+            #[expect(clippy::missing_panics_doc, reason = "already checked")]
             let concrete = (self.0 as Box<dyn Any + Send + Sync>)
                 .downcast::<T>()
                 .expect("the concrete type of this box should be `T` as it was checked before downcasting.");
@@ -140,7 +143,7 @@ mod tests {
     #[test]
     fn test_type_id() {
         let erased = Erased::new("Hello".to_string());
-        assert_eq!(erased.type_id(), TypeId::of::<String>())
+        assert_eq!(erased.type_id(), TypeId::of::<String>());
     }
 
     #[test]

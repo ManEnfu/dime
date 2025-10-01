@@ -18,6 +18,7 @@ pub struct Store(HashMap<TypeId, Erased>);
 impl Store {
     /// Creates a new [`Store`].
     #[inline]
+    #[must_use]
     pub fn new() -> Self {
         Self(HashMap::new())
     }
@@ -28,6 +29,10 @@ impl Store {
         T: Clone + Send + Sync + 'static,
     {
         self.insert_erased(Erased::new(value)).1.map(|v| {
+            #[expect(
+                clippy::missing_panics_doc,
+                reason = "it is guaranteed that v.type_id() == TypeId::of::<T>()"
+            )]
             v.downcast()
                 .expect("`the returned value should be of type `T`")
         })
@@ -46,7 +51,11 @@ impl Store {
         T: Clone + Send + Sync + 'static,
     {
         self.get_by_id(TypeId::of::<T>()).map(|v| {
-            v.downcast_ref()
+            #[expect(
+                clippy::missing_panics_doc,
+                reason = "it is guaranteed that v.type_id() == TypeId::of::<T>()"
+            )]
+            (*v).downcast_ref()
                 .expect("`the returned value should be of type `T`")
         })
     }
@@ -57,12 +66,37 @@ impl Store {
         self.0.get(&type_id)
     }
 
+    /// Returns a mutable reference to the value of the specified type.
+    pub fn get_mut<T>(&mut self) -> Option<&mut T>
+    where
+        T: Clone + Send + Sync + 'static,
+    {
+        self.get_mut_by_id(TypeId::of::<T>()).map(|v| {
+            #[expect(
+                clippy::missing_panics_doc,
+                reason = "it is guaranteed that v.type_id() == TypeId::of::<T>()"
+            )]
+            (*v).downcast_mut()
+                .expect("`the returned value should be of type `T`")
+        })
+    }
+
+    /// Returns a mutable reference to the [`Erased`] value corresponding to `type_id`.
+    #[inline]
+    pub fn get_mut_by_id(&mut self, type_id: TypeId) -> Option<&mut Erased> {
+        self.0.get_mut(&type_id)
+    }
+
     /// Removes a value of the specified type from the store and returns it, if one exists.
     pub fn remove<T>(&mut self) -> Option<T>
     where
         T: Clone + Send + Sync + 'static,
     {
         self.remove_by_id(TypeId::of::<T>()).map(|v| {
+            #[expect(
+                clippy::missing_panics_doc,
+                reason = "it is guaranteed that v.type_id() == TypeId::of::<T>()"
+            )]
             v.downcast()
                 .expect("`the returned value should be of type `T`")
         })
@@ -108,7 +142,7 @@ mod tests {
         assert!(store.insert("borrowed").is_none());
         let got: &String = store.get().unwrap();
         assert_eq!(got, "owned");
-        assert!(store.get::<i32>().is_none())
+        assert!(store.get::<i32>().is_none());
     }
 
     #[test]
@@ -127,6 +161,6 @@ mod tests {
         assert!(store.insert("owned".to_string()).is_none());
         let got: String = store.remove().unwrap();
         assert_eq!(got, "owned");
-        assert!(store.get::<String>().is_none())
+        assert!(store.get::<String>().is_none());
     }
 }
