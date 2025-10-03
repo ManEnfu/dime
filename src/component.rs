@@ -14,7 +14,7 @@ use crate::result::Result;
 /// an [`Arc`] and it will implement [`RequestFrom`].
 pub trait RequestFrom<R>: Clone + Sized + Send + Sync + 'static
 where
-    R: Send + Sync + 'static,
+    R: ?Sized + Send + Sync + 'static,
 {
     /// Requests a value of the specified type from a resolver.
     fn request_from(resolver: &R) -> impl Future<Output = Result<Self>> + Send;
@@ -23,7 +23,7 @@ where
 /// [`OptionalRequestFrom`] is similar to [`RequestFrom`], but for optional value.
 pub trait OptionalRequestFrom<R>: Clone + Sized + Send + Sync + 'static
 where
-    R: Send + Sync + 'static,
+    R: ?Sized + Send + Sync + 'static,
 {
     /// Requests a value of the specified type from a resolver, returning `Ok(None)`
     /// if it is not found or defined in the resolver.
@@ -32,8 +32,8 @@ where
 
 impl<R, T> RequestFrom<R> for Arc<T>
 where
-    R: Send + Sync + 'static,
-    T: Send + Sync + 'static,
+    R: ?Sized + Send + Sync + 'static,
+    T: ?Sized + Send + Sync + 'static,
 {
     async fn request_from(_: &R) -> Result<Self> {
         todo!()
@@ -42,8 +42,8 @@ where
 
 impl<R, T> OptionalRequestFrom<R> for Arc<T>
 where
-    R: Send + Sync + 'static,
-    T: Send + Sync + 'static,
+    R: ?Sized + Send + Sync + 'static,
+    T: ?Sized + Send + Sync + 'static,
 {
     async fn optional_request_from(_: &R) -> Result<Option<Self>> {
         todo!()
@@ -52,7 +52,7 @@ where
 
 impl<R, T> RequestFrom<R> for Option<T>
 where
-    R: Send + Sync + 'static,
+    R: ?Sized + Send + Sync + 'static,
     T: OptionalRequestFrom<R>,
 {
     #[inline]
@@ -63,7 +63,7 @@ where
 
 impl<R, T> RequestFrom<R> for Result<T>
 where
-    R: Send + Sync + 'static,
+    R: ?Sized + Send + Sync + 'static,
     T: RequestFrom<R>,
 {
     #[inline]
@@ -76,7 +76,7 @@ macro_rules! impl_request_tuple {
     ($($ty:ident),*) => {
         impl<R, $($ty,)*> RequestFrom<R> for ($($ty,)*)
         where
-            R: Send + Sync + 'static,
+            R: ?Sized + Send + Sync + 'static,
             $($ty: RequestFrom<R>,)*
         {
             async fn request_from(resolver: &R) -> Result<Self>
@@ -98,7 +98,7 @@ apply_tuples!(impl_request_tuple);
 /// an [`Arc`] and it will implement [`InjectTo`].
 pub trait InjectTo<R>: Clone + Sized + Send + Sync + 'static
 where
-    R: Send + Sync + 'static,
+    R: ?Sized + Send + Sync + 'static,
 {
     /// Injects `self` into a resolver.
     fn inject_to(self, resolver: &R) -> impl Future<Output = Result<()>> + Send;
@@ -106,8 +106,8 @@ where
 
 impl<R, T> InjectTo<R> for Arc<T>
 where
-    R: Send + Sync + 'static,
-    T: Send + Sync + 'static,
+    R: ?Sized + Send + Sync + 'static,
+    T: ?Sized + Send + Sync + 'static,
 {
     async fn inject_to(self, _: &R) -> Result<()> {
         todo!()
@@ -116,7 +116,7 @@ where
 
 impl<R, T> InjectTo<R> for Option<T>
 where
-    R: Send + Sync + 'static,
+    R: ?Sized + Send + Sync + 'static,
     T: InjectTo<R>,
 {
     #[inline]
@@ -131,7 +131,7 @@ where
 
 impl<R, T> InjectTo<R> for Result<T>
 where
-    R: Send + Sync + 'static,
+    R: ?Sized + Send + Sync + 'static,
     T: InjectTo<R>,
 {
     #[inline]
@@ -148,7 +148,7 @@ macro_rules! impl_inject_tuple {
         #[allow(non_snake_case)]
         impl<R, $($ty,)*> InjectTo<R> for ($($ty,)*)
         where
-            R: Send + Sync + 'static,
+            R: ?Sized + Send + Sync + 'static,
             $($ty: InjectTo<R>,)*
         {
             async fn inject_to(self, resolver: &R) -> Result<()>

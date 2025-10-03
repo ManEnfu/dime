@@ -17,14 +17,17 @@ use crate::{
 ///   that implements [`InjectTo`].
 /// - Async functions that take [`RequestFrom`] parameters and return future
 ///   that resolves to a type that implements [`InjectTo`].
-pub trait Constructor<T, R>: Clone + Sized + Send + Sync + 'static {
+pub trait Constructor<T, R>: Clone + Sized + Send + Sync + 'static
+where
+    R: ?Sized + Send + Sync + 'static,
+{
     /// Calls the constructor on a resolver.
     fn call(self, resolver: &R) -> impl Future<Output = Result<()>> + Send;
 }
 
 impl<R, O> Constructor<(), R> for O
 where
-    R: Send + Sync + 'static,
+    R: ?Sized + Send + Sync + 'static,
     O: InjectTo<R>,
 {
     async fn call(self, resolver: &R) -> Result<()> {
@@ -37,7 +40,7 @@ macro_rules! impl_constructor_fn {
         #[allow(non_snake_case)]
         impl<F, R, $($ty,)* O> Constructor<((O,), $($ty,)*), R> for F
         where
-            R: Send + Sync + 'static,
+            R: ?Sized + Send + Sync + 'static,
             F: FnOnce($($ty,)*) -> O + Clone + Send + Sync + 'static,
             $( $ty: RequestFrom<R>, )*
             O: InjectTo<R>,
@@ -58,7 +61,7 @@ macro_rules! impl_constructor_async_fn {
         #[allow(non_snake_case)]
         impl<F, Fut, R, $($ty,)* O> Constructor<(Pin<Fut>, $($ty,)*), R> for F
         where
-            R: Send + Sync + 'static,
+            R: ?Sized + Send + Sync + 'static,
             F: FnOnce($($ty,)*) -> Fut + Clone + Send + Sync + 'static,
             Fut: Future<Output = O> + Send,
             $( $ty: RequestFrom<R>, )*
