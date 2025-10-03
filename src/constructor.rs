@@ -21,6 +21,9 @@ pub trait Constructor<T, R>: Clone + Sized + Send + Sync + 'static
 where
     R: ?Sized + Send + Sync + 'static,
 {
+    /// The type constructed by this constructor.
+    type Constructed: InjectTo<R>;
+
     /// Calls the constructor on a resolver.
     fn call(self, resolver: &R) -> impl Future<Output = Result<()>> + Send;
 }
@@ -30,6 +33,8 @@ where
     R: ?Sized + Send + Sync + 'static,
     O: InjectTo<R>,
 {
+    type Constructed = O;
+
     async fn call(self, resolver: &R) -> Result<()> {
         self.inject_to(resolver).await
     }
@@ -45,6 +50,8 @@ macro_rules! impl_constructor_fn {
             $( $ty: RequestFrom<R>, )*
             O: InjectTo<R>,
         {
+            type Constructed = O;
+
             async fn call(self, resolver: &R) -> Result<()> {
                 let ($($ty,)*) = <($($ty,)*)>::request_from(resolver).await?;
                 let res = self($($ty,)*);
@@ -67,6 +74,8 @@ macro_rules! impl_constructor_async_fn {
             $( $ty: RequestFrom<R>, )*
             O: InjectTo<R>,
         {
+            type Constructed = O;
+
             async fn call(self, resolver: &R) -> Result<()> {
                 let ($($ty,)*) = <($($ty,)*)>::request_from(resolver).await?;
                 let res = self($($ty,)*).await;

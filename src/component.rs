@@ -100,6 +100,10 @@ pub trait InjectTo<R>: Clone + Sized + Send + Sync + 'static
 where
     R: ?Sized + Send + Sync + 'static,
 {
+    /// Registers this type to a resolver. This can be used to tell the resolver to reserve space
+    /// to store the value of this type.
+    fn register(resolver: &R);
+
     /// Injects `self` into a resolver.
     fn inject_to(self, resolver: &R) -> impl Future<Output = Result<()>> + Send;
 }
@@ -109,6 +113,10 @@ where
     R: ?Sized + Send + Sync + 'static,
     T: ?Sized + Send + Sync + 'static,
 {
+    fn register(_: &R) {
+        todo!()
+    }
+
     async fn inject_to(self, _: &R) -> Result<()> {
         todo!()
     }
@@ -119,6 +127,11 @@ where
     R: ?Sized + Send + Sync + 'static,
     T: InjectTo<R>,
 {
+    #[inline]
+    fn register(resolver: &R) {
+        T::register(resolver);
+    }
+
     #[inline]
     async fn inject_to(self, resolver: &R) -> Result<()> {
         if let Some(v) = self {
@@ -134,6 +147,11 @@ where
     R: ?Sized + Send + Sync + 'static,
     T: InjectTo<R>,
 {
+    #[inline]
+    fn register(resolver: &R) {
+        T::register(resolver);
+    }
+
     #[inline]
     async fn inject_to(self, resolver: &R) -> Result<()> {
         match self {
@@ -151,6 +169,10 @@ macro_rules! impl_inject_tuple {
             R: ?Sized + Send + Sync + 'static,
             $($ty: InjectTo<R>,)*
         {
+            fn register(resolver: &R) {
+                $( $ty::register(resolver); )*
+            }
+
             async fn inject_to(self, resolver: &R) -> Result<()>
             {
                 let ($($ty,)*) = self;
@@ -188,6 +210,8 @@ mod comp_tests {
     where
         R: Send + Sync + 'static,
     {
+        fn register(_: &R) {}
+
         async fn inject_to(self, _: &R) -> Result<()> {
             unimplemented!()
         }
