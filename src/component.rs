@@ -1,8 +1,11 @@
-use std::{any::TypeId, sync::Arc};
+//! Traits implemented by components.
+//!
+//! The traits defined in this modules defines how components are requested from and injected into
+//! resolvers.
 
-use crate::result::{ResolutionError, Result};
+use std::sync::Arc;
 
-pub trait Resolver: Send + Sync + 'static {}
+use crate::result::Result;
 
 /// [`RequestFrom`] is a trait for components or groups of components which values can be requested
 /// from a resolver.
@@ -17,6 +20,16 @@ where
     fn request_from(resolver: &R) -> impl Future<Output = Result<Self>> + Send;
 }
 
+/// [`OptionalRequestFrom`] is similar to [`RequestFrom`], but for optional value.
+pub trait OptionalRequestFrom<R>: Clone + Sized + Send + Sync + 'static
+where
+    R: Send + Sync + 'static,
+{
+    /// Requests a value of the specified type from a resolver, returning `Ok(None)`
+    /// if it is not found or defined in the resolver.
+    fn optional_request_from(resolver: &R) -> impl Future<Output = Result<Option<Self>>> + Send;
+}
+
 impl<R, T> RequestFrom<R> for Arc<T>
 where
     R: Send + Sync + 'static,
@@ -27,19 +40,24 @@ where
     }
 }
 
+impl<R, T> OptionalRequestFrom<R> for Arc<T>
+where
+    R: Send + Sync + 'static,
+    T: Send + Sync + 'static,
+{
+    async fn optional_request_from(_: &R) -> Result<Option<Self>> {
+        todo!()
+    }
+}
+
 impl<R, T> RequestFrom<R> for Option<T>
 where
     R: Send + Sync + 'static,
-    T: RequestFrom<R>,
+    T: OptionalRequestFrom<R>,
 {
+    #[inline]
     async fn request_from(resolver: &R) -> Result<Self> {
-        match T::request_from(resolver).await {
-            Ok(v) => Ok(Some(v)),
-            Err(ResolutionError::NotDefined(type_id, _)) if type_id == TypeId::of::<T>() => {
-                Ok(None)
-            }
-            Err(err) => Err(err),
-        }
+        T::optional_request_from(resolver).await
     }
 }
 
@@ -48,6 +66,7 @@ where
     R: Send + Sync + 'static,
     T: RequestFrom<R>,
 {
+    #[inline]
     async fn request_from(resolver: &R) -> Result<Self> {
         Ok(T::request_from(resolver).await)
     }
@@ -100,11 +119,12 @@ where
     R: Send + Sync + 'static,
     T: InjectTo<R>,
 {
+    #[inline]
     async fn inject_to(self, resolver: &R) -> Result<()> {
         if let Some(v) = self {
             v.inject_to(resolver).await
         } else {
-            Err(ResolutionError::not_defined::<T>())
+            Ok(())
         }
     }
 }
@@ -114,6 +134,7 @@ where
     R: Send + Sync + 'static,
     T: InjectTo<R>,
 {
+    #[inline]
     async fn inject_to(self, resolver: &R) -> Result<()> {
         match self {
             Ok(v) => v.inject_to(resolver).await,
@@ -146,6 +167,8 @@ apply_tuples!(impl_inject_tuple);
 #[cfg(test)]
 mod comp_tests {
     //! This modules tests if a type implements [`Request`] and [`Inject`] at compile time.
+
+    use crate::result::ResolutionError;
 
     use super::*;
 
