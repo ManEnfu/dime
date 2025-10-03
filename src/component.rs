@@ -4,39 +4,36 @@ use crate::result::{ResolutionError, Result};
 
 pub trait Resolver: Send + Sync + 'static {}
 
-/// [`Request`] is a trait for components or groups of components which values can be requested
+/// [`RequestFrom`] is a trait for components or groups of components which values can be requested
 /// from a resolver.
 ///
 /// In most cases, you don't need to implement this trait manually. You can wrap any type inside
-/// an [`Arc`] and it will implement [`Request`].
-pub trait Request: Clone + Sized + Send + Sync + 'static {
+/// an [`Arc`] and it will implement [`RequestFrom`].
+pub trait RequestFrom<R>: Clone + Sized + Send + Sync + 'static
+where
+    R: Send + Sync + 'static,
+{
     /// Requests a value of the specified type from a resolver.
-    fn request<R>(resolver: &R) -> impl Future<Output = Result<Self>> + Send
-    where
-        R: Resolver;
+    fn request_from(resolver: &R) -> impl Future<Output = Result<Self>> + Send;
 }
 
-impl<T> Request for Arc<T>
+impl<R, T> RequestFrom<R> for Arc<T>
 where
+    R: Send + Sync + 'static,
     T: Send + Sync + 'static,
 {
-    async fn request<R>(_: &R) -> Result<Self>
-    where
-        R: Resolver,
-    {
+    async fn request_from(_: &R) -> Result<Self> {
         todo!()
     }
 }
 
-impl<T> Request for Option<T>
+impl<R, T> RequestFrom<R> for Option<T>
 where
-    T: Request,
+    R: Send + Sync + 'static,
+    T: RequestFrom<R>,
 {
-    async fn request<R>(resolver: &R) -> Result<Self>
-    where
-        R: Resolver,
-    {
-        match T::request(resolver).await {
+    async fn request_from(resolver: &R) -> Result<Self> {
+        match T::request_from(resolver).await {
             Ok(v) => Ok(Some(v)),
             Err(ResolutionError::NotDefined(type_id, _)) if type_id == TypeId::of::<T>() => {
                 Ok(None)
@@ -46,30 +43,27 @@ where
     }
 }
 
-impl<T> Request for Result<T>
+impl<R, T> RequestFrom<R> for Result<T>
 where
-    T: Request,
+    R: Send + Sync + 'static,
+    T: RequestFrom<R>,
 {
-    async fn request<R>(resolver: &R) -> Result<Self>
-    where
-        R: Resolver,
-    {
-        Ok(T::request(resolver).await)
+    async fn request_from(resolver: &R) -> Result<Self> {
+        Ok(T::request_from(resolver).await)
     }
 }
 
 macro_rules! impl_request_tuple {
     ($($ty:ident),*) => {
-        impl<$($ty,)*> Request for ($($ty,)*)
+        impl<R, $($ty,)*> RequestFrom<R> for ($($ty,)*)
         where
-            $($ty: Request,)*
+            R: Send + Sync + 'static,
+            $($ty: RequestFrom<R>,)*
         {
-            async fn request<R>(resolver: &R) -> Result<Self>
-            where
-                R: Resolver,
+            async fn request_from(resolver: &R) -> Result<Self>
             {
                 Ok((
-                    $( $ty::request(resolver).await?, )*
+                    $( $ty::request_from(resolver).await?, )*
                 ))
             }
         }
@@ -78,56 +72,51 @@ macro_rules! impl_request_tuple {
 
 apply_tuples!(impl_request_tuple);
 
-/// [`Inject`] is a trait for components or group of components which can be injected
+/// [`InjectTo`] is a trait for components or group of components which can be injected
 /// into a resolver.
 ///
 /// In most cases, you don't need to implement this trait manually. You can wrap any type inside
-/// an [`Arc`] and it will implement [`Inject`].
-pub trait Inject: Clone + Sized + Send + Sync + 'static {
+/// an [`Arc`] and it will implement [`InjectTo`].
+pub trait InjectTo<R>: Clone + Sized + Send + Sync + 'static
+where
+    R: Send + Sync + 'static,
+{
     /// Injects `self` into a resolver.
-    fn inject<R>(self, resolver: &R) -> impl Future<Output = Result<()>> + Send
-    where
-        R: Resolver;
+    fn inject_to(self, resolver: &R) -> impl Future<Output = Result<()>> + Send;
 }
 
-impl<T> Inject for Arc<T>
+impl<R, T> InjectTo<R> for Arc<T>
 where
+    R: Send + Sync + 'static,
     T: Send + Sync + 'static,
 {
-    async fn inject<R>(self, _: &R) -> Result<()>
-    where
-        R: Resolver,
-    {
+    async fn inject_to(self, _: &R) -> Result<()> {
         todo!()
     }
 }
 
-impl<T> Inject for Option<T>
+impl<R, T> InjectTo<R> for Option<T>
 where
-    T: Inject,
+    R: Send + Sync + 'static,
+    T: InjectTo<R>,
 {
-    async fn inject<R>(self, resolver: &R) -> Result<()>
-    where
-        R: Resolver,
-    {
+    async fn inject_to(self, resolver: &R) -> Result<()> {
         if let Some(v) = self {
-            v.inject(resolver).await
+            v.inject_to(resolver).await
         } else {
             Err(ResolutionError::not_defined::<T>())
         }
     }
 }
 
-impl<T> Inject for Result<T>
+impl<R, T> InjectTo<R> for Result<T>
 where
-    T: Inject,
+    R: Send + Sync + 'static,
+    T: InjectTo<R>,
 {
-    async fn inject<R>(self, resolver: &R) -> Result<()>
-    where
-        R: Resolver,
-    {
+    async fn inject_to(self, resolver: &R) -> Result<()> {
         match self {
-            Ok(v) => v.inject(resolver).await,
+            Ok(v) => v.inject_to(resolver).await,
             Err(e) => Err(e),
         }
     }
@@ -136,16 +125,15 @@ where
 macro_rules! impl_inject_tuple {
     ($($ty:ident),*) => {
         #[allow(non_snake_case)]
-        impl<$($ty,)*> Inject for ($($ty,)*)
+        impl<R, $($ty,)*> InjectTo<R> for ($($ty,)*)
         where
-            $($ty: Inject,)*
+            R: Send + Sync + 'static,
+            $($ty: InjectTo<R>,)*
         {
-            async fn inject<R>(self, resolver: &R) -> Result<()>
-            where
-                R: Resolver,
+            async fn inject_to(self, resolver: &R) -> Result<()>
             {
                 let ($($ty,)*) = self;
-                $( $ty.inject(resolver).await?; )*
+                $( $ty.inject_to(resolver).await?; )*
                 Ok(())
             }
         }
@@ -164,27 +152,27 @@ mod comp_tests {
     #[derive(Clone)]
     struct Foo {}
 
-    impl Request for Foo {
-        async fn request<R>(_: &R) -> Result<Self>
-        where
-            R: Resolver,
-        {
+    impl<R> RequestFrom<R> for Foo
+    where
+        R: Send + Sync + 'static,
+    {
+        async fn request_from(_: &R) -> Result<Self> {
             unimplemented!()
         }
     }
 
-    impl Inject for Foo {
-        async fn inject<R>(self, _: &R) -> Result<()>
-        where
-            R: Resolver,
-        {
+    impl<R> InjectTo<R> for Foo
+    where
+        R: Send + Sync + 'static,
+    {
+        async fn inject_to(self, _: &R) -> Result<()> {
             unimplemented!()
         }
     }
 
     fn is_request<T>()
     where
-        T: Request,
+        T: RequestFrom<()>,
     {
     }
 
@@ -202,7 +190,7 @@ mod comp_tests {
 
     fn is_inject<T>(_: T)
     where
-        T: Inject,
+        T: InjectTo<()>,
     {
     }
 
