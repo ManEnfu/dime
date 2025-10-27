@@ -15,5 +15,7 @@ pub mod store;
 
 pub mod result;
 
+pub mod runtime;
+
 pub mod component;
 pub mod constructor;
