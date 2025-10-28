@@ -2,11 +2,11 @@
 
 use std::any::Any;
 
-use crate::BoxedClone;
+use crate::DynClone;
 
 /// [`Erased`] is a container for value of an arbitrary type, as long as it
 /// implements [`Clone`], [`Send`], and [`Sync`] and is `'static`.
-pub struct Erased(Box<dyn BoxedClone + Send + Sync>);
+pub struct Erased(Box<dyn DynClone + Send + Sync>);
 
 impl Erased {
     /// Creates a new `Erased` with the provided `value` of type `T`.
@@ -17,7 +17,7 @@ impl Erased {
     where
         T: Clone + Send + Sync + 'static,
     {
-        Self(Box::new(value) as Box<dyn BoxedClone + Send + Sync>)
+        Self(Box::new(value) as Box<dyn DynClone + Send + Sync>)
     }
 
     /// Tries to downcast `self` into type `T`.
@@ -58,7 +58,7 @@ impl std::ops::DerefMut for Erased {
 
 impl Clone for Erased {
     fn clone(&self) -> Self {
-        Self(self.0.boxed_clone())
+        Self(self.0.dyn_clone())
     }
 }
 

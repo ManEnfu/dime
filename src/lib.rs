@@ -4,12 +4,12 @@
 #![warn(clippy::nursery)]
 #![allow(clippy::must_use_candidate)]
 
-pub use boxed_clone::BoxedClone;
+pub use dyn_clone::DynClone;
 
 #[macro_use]
 pub(crate) mod macros;
 
-mod boxed_clone;
+mod dyn_clone;
 pub mod erased;
 pub mod store;
 
