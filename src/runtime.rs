@@ -33,7 +33,7 @@ pub trait Task {
 }
 
 #[cfg(any(feature = "tokio", test))]
-pub use rt_tokio::TokioRuntime;
+pub use rt_tokio::{TokioRuntime, TokioTask};
 
 #[cfg(any(feature = "tokio", test))]
 mod rt_tokio {
