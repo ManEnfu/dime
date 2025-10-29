@@ -13,7 +13,7 @@ mod state_map;
 pub use state_map::StateMap;
 
 /// A base trait for container to inject to and retrieve value from.
-pub trait Injector: Send + Sync {
+pub trait Injector {
     /// Tells the injector that a type might be injected to it.
     ///
     /// Depending on the implementation, Trying to retrieve value (e.g. by calling
