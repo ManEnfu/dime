@@ -17,5 +17,7 @@ pub mod result;
 
 pub mod runtime;
 
+pub mod injector;
+
 pub mod component;
 pub mod constructor;

@@ -1,10 +1,10 @@
-use std::any::TypeId;
+use std::any::{TypeId, type_name};
 use std::collections::BTreeMap;
 use std::sync::RwLock;
 
 use crate::erased::Erased;
 use crate::injector::Injector;
-use crate::injector::state::RawState;
+use crate::injector::state::{RawState, StateRef, Watch};
 use crate::result::Result;
 
 use super::state::RawWatch;
@@ -23,7 +23,9 @@ impl StateMap {
         }
     }
 
-    pub fn with_state<F>(&self, type_id: TypeId, type_name: &'static str, f: F)
+    /// Calls a closure on a state of the given type, creating a new state if one does not yet
+    /// exists.
+    pub fn with_state_by_type_id<F>(&self, type_id: TypeId, type_name: &'static str, f: F)
     where
         F: FnOnce(&RawState),
     {
@@ -52,7 +54,24 @@ impl StateMap {
         states.insert(type_id, state);
     }
 
-    pub fn with_state_and_watch<F>(
+    /// Calls a closure on a state of the given type, creating a new state if one does not yet
+    /// exists.
+    ///
+    /// This method is the type-safe variant of
+    /// [`with_state_by_type_id`](Self::with_state_by_type_id).
+    pub fn with_state<T, F>(&self, f: F)
+    where
+        T: Clone + Send + Sync + 'static,
+        F: FnOnce(StateRef<'_, T>),
+    {
+        self.with_state_by_type_id(TypeId::of::<T>(), type_name::<T>(), |raw| {
+            f(StateRef::from_raw(raw));
+        });
+    }
+
+    /// Calls a closure on a state of the given type and returns the watch to it, creating a new
+    /// state if one does not yet exists.
+    pub fn with_state_and_watch_by_type_id<F>(
         &self,
         type_id: TypeId,
         type_name: &'static str,
@@ -87,19 +106,37 @@ impl StateMap {
         states.insert(type_id, state);
         watch
     }
+
+    /// Calls a closure on a state of the given type and returns the watch to it, creating a new
+    /// state if one does not yet exists.
+    ///
+    /// This method is the type-safe variant of
+    /// [`with_state_and_watch_by_type_id`](Self::with_state_and_watch_by_type_id).
+    pub fn with_state_and_watch<T, F>(&self, f: F) -> Watch<T>
+    where
+        T: Clone + Send + Sync + 'static,
+        F: FnOnce(StateRef<'_, T>),
+    {
+        let raw =
+            self.with_state_and_watch_by_type_id(TypeId::of::<T>(), type_name::<T>(), |raw| {
+                f(StateRef::from_raw(raw));
+            });
+
+        Watch::from_raw(raw)
+    }
 }
 
 impl Injector for StateMap {
     fn define_by_type_id(&self, type_id: TypeId, type_name: &'static str) {
-        self.with_state(type_id, type_name, RawState::define);
+        self.with_state_by_type_id(type_id, type_name, RawState::define);
     }
 
     fn inject_by_type_id(&self, type_id: TypeId, type_name: &'static str, value: Result<Erased>) {
-        self.with_state(type_id, type_name, |state| state.inject(value));
+        self.with_state_by_type_id(type_id, type_name, |state| state.inject(value));
     }
 
     fn raw_watch_by_type_id(&self, type_id: TypeId, type_name: &'static str) -> RawWatch {
-        self.with_state_and_watch(type_id, type_name, |_| {})
+        self.with_state_and_watch_by_type_id(type_id, type_name, |_| {})
     }
 }
 

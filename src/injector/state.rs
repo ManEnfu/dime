@@ -38,6 +38,9 @@ impl Inner {
 }
 
 /// A state of a given type in [`Injector`](crate::injector::Injector).
+///
+/// This is a *raw* version of the state, which works with [`Erased`] values.
+/// To work with values of concrete types, consider using [`State`].
 #[derive(Debug, Clone)]
 pub struct RawState {
     inner: watch::Sender<Inner>,
@@ -54,6 +57,20 @@ pub struct RawWatch {
     inner: watch::Receiver<Inner>,
     type_id: TypeId,
     type_name: &'static str,
+}
+
+/// A state of a given type in [`Injector`](crate::injector::Injector).
+#[derive(Debug, Clone)]
+pub struct State<T> {
+    raw: RawState,
+    _marker: PhantomData<T>,
+}
+
+/// A reference to a state of a given type in [`Injector`](crate::injector::Injector).
+#[derive(Debug, Clone)]
+pub struct StateRef<'a, T> {
+    raw: &'a RawState,
+    _marker: PhantomData<T>,
 }
 
 /// Watches for values of a given type in [`Injector`](crate::injector::Injector).
@@ -213,6 +230,136 @@ impl RawWatch {
     }
 }
 
+impl<T> State<T>
+where
+    T: Clone + Send + Sync + 'static,
+{
+    /// Creates a state from [`RawState`].
+    ///
+    /// # Panics
+    ///
+    /// Panic may occur if `T` and the underlying type of the value stored in [`RawState`] does
+    /// not match.
+    pub fn from_raw(raw: RawState) -> Self {
+        debug_assert_eq!(TypeId::of::<T>(), raw.type_id);
+
+        Self {
+            raw,
+            _marker: PhantomData,
+        }
+    }
+
+    /// Tells the state a type might be injected to it.
+    #[inline]
+    pub fn define(&self) {
+        self.raw.define();
+    }
+
+    /// Injects a value into the state.
+    #[inline]
+    pub fn inject(&self, value: Result<Erased>) {
+        self.raw.inject(value.map(Erased::new));
+    }
+
+    /// Returns true if the type has been defined for the state.
+    #[inline]
+    pub fn is_defined(&self) -> bool {
+        self.raw.is_defined()
+    }
+
+    /// Returns true if the type has been available.
+    #[inline]
+    pub fn is_available(&self) -> bool {
+        self.raw.is_available()
+    }
+
+    /// Returns a watch for this state.
+    #[inline]
+    pub fn watch(&self) -> Watch<T> {
+        Watch::from_raw(self.raw.watch())
+    }
+
+    /// Returns a reference to this state.
+    #[inline]
+    pub fn as_ref(&self) -> StateRef<'_, T> {
+        StateRef::from_raw(&self.raw)
+    }
+
+    /// Returns a reference to the raw state.
+    #[inline]
+    pub const fn as_raw(&self) -> &RawState {
+        &self.raw
+    }
+
+    /// Takes the state and returns the raw version of this state.
+    #[inline]
+    pub fn into_raw(self) -> RawState {
+        self.raw
+    }
+}
+
+impl<'a, T> StateRef<'a, T>
+where
+    T: Clone + Send + Sync + 'static,
+{
+    /// Creates a state from [`RawState`].
+    ///
+    /// # Panics
+    ///
+    /// Panic may occur if `T` and the underlying type of the value stored in [`RawState`] does
+    /// not match.
+    pub fn from_raw(raw: &'a RawState) -> Self {
+        debug_assert_eq!(TypeId::of::<T>(), raw.type_id);
+
+        Self {
+            raw,
+            _marker: PhantomData,
+        }
+    }
+
+    /// Tells the state a type might be injected to it.
+    #[inline]
+    pub fn define(&self) {
+        self.raw.define();
+    }
+
+    /// Injects a value into the state.
+    #[inline]
+    pub fn inject(&self, value: Result<Erased>) {
+        self.raw.inject(value.map(Erased::new));
+    }
+
+    /// Returns true if the type has been defined for the state.
+    #[inline]
+    pub fn is_defined(&self) -> bool {
+        self.raw.is_defined()
+    }
+
+    /// Returns true if the type has been available.
+    #[inline]
+    pub fn is_available(&self) -> bool {
+        self.raw.is_available()
+    }
+
+    /// Returns a watch for this state.
+    #[inline]
+    pub fn watch(&self) -> Watch<T> {
+        Watch::from_raw(self.raw.watch())
+    }
+
+    /// Returns the owned variant of this state.
+    #[inline]
+    pub fn to_owned(&self) -> State<T> {
+        State::from_raw(self.raw.clone())
+    }
+
+    /// Returns a reference to the raw state.
+    #[inline]
+    pub const fn as_raw(&self) -> &RawState {
+        self.raw
+    }
+}
+
 impl<T> Watch<T>
 where
     T: Clone + Send + Sync + 'static,
@@ -223,7 +370,7 @@ where
     ///
     /// Panic may occur if `T` and the underlying type of the values observed by [`RawWatch`] does
     /// not match.
-    pub(crate) fn from_raw(raw: RawWatch) -> Self {
+    pub fn from_raw(raw: RawWatch) -> Self {
         debug_assert_eq!(TypeId::of::<T>(), raw.type_id);
 
         Self {
@@ -301,5 +448,17 @@ where
     #[inline]
     pub fn is_available(&self) -> bool {
         self.raw.is_available()
+    }
+
+    /// Returns a reference to the raw watch.
+    #[inline]
+    pub const fn as_raw(&self) -> &RawWatch {
+        &self.raw
+    }
+
+    /// Takes the watch and returns the raw version of this watch.
+    #[inline]
+    pub fn into_raw(self) -> RawWatch {
+        self.raw
     }
 }

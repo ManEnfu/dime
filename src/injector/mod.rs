@@ -88,7 +88,7 @@ pub trait InjectorExt: Injector {
     /// Calling this method ensures that retrieving value of this type will wait until a value
     /// is available.
     ///
-    /// This method is a type-safe variant of [`Injector::define_by_type_id`].
+    /// This method is the type-safe variant of [`Injector::define_by_type_id`].
     fn define<T>(&self)
     where
         T: Clone + Send + Sync + 'static,
@@ -98,7 +98,7 @@ pub trait InjectorExt: Injector {
 
     /// Inject a value of a given type into the injector.
     ///
-    /// This method is a type-safe variant of [`Injector::inject_by_type_id`].
+    /// This method is the type-safe variant of [`Injector::inject_by_type_id`].
     fn inject<T>(&self, value: Result<T>)
     where
         T: Clone + Send + Sync + 'static,
@@ -108,7 +108,7 @@ pub trait InjectorExt: Injector {
 
     /// Watches for values of a given type in the injector.
     ///
-    /// This method is a type-safe variant of [`Injector::raw_watch_by_type_id`].
+    /// This method is the type-safe variant of [`Injector::raw_watch_by_type_id`].
     fn watch<T>(&self) -> Watch<T>
     where
         T: Clone + Send + Sync + 'static,
