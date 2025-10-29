@@ -10,6 +10,131 @@ use crate::result::Result;
 use super::state::RawWatch;
 
 /// A Simple injector backed by [`BTreeMap`].
+///
+/// # Examples
+///
+/// The following example demonstrates how to connect to a database with an address as its
+/// dependency:
+///
+/// ```
+/// use std::sync::Arc;
+/// use std::sync::atomic::{AtomicBool, Ordering};
+/// # use std::time::Duration;
+/// #
+/// # use tokio::time::timeout;
+///
+/// use dime::injector::{StateMap, InjectorExt};
+/// #
+/// # const TIMEOUT: Duration = Duration::from_millis(500);
+///
+/// #[derive(Clone, Debug, Default, PartialEq, Eq)]
+/// struct Address(&'static str);
+///
+/// #[derive(Clone, Debug)]
+/// struct Database(Arc<DatabaseInner>);
+///
+/// #[derive(Debug)]
+/// struct DatabaseInner {
+///     address: Address,
+///     connected: AtomicBool,
+/// }
+///
+/// impl Database {
+///     fn connect(address: Address) -> Self {
+///         Self(Arc::new(DatabaseInner {
+///             address,
+///             connected: AtomicBool::new(true),
+///         }))
+///     }
+///
+///     fn address(&self) -> &Address {
+///         &self.0.address
+///     }
+///
+///     fn disconnect(&self) {
+///         self.0.connected.store(false, Ordering::Relaxed);
+///     }
+///
+///     fn is_connected(&self) -> bool {
+///         self.0.connected.load(Ordering::Relaxed)
+///     }
+/// }
+///
+/// # async fn dox() {
+/// let injector = Arc::new(StateMap::new());
+///
+/// let mut watch_db = injector.watch::<Database>();
+///
+/// // If we try to request a database value, it will return an error!
+/// # timeout(TIMEOUT, async {
+/// let err = watch_db.available().await.unwrap_err();
+/// assert!(err.is_not_defined_for::<Database>());
+/// # })
+/// # .await
+/// # .unwrap();
+///
+/// // Spawn an async task that will connect to our database from the injected address.
+/// let cloned = injector.clone();
+/// tokio::spawn(async move {
+///     let injector = cloned;
+///
+///     injector.define::<Database>();
+///     let mut watch_address = injector.watch::<Address>();
+///     let mut current_db: Option<Database> = None;
+///
+///     loop {
+///         match watch_address.available().await {
+///             Ok(address) => {
+///                 // Connect to a new database.
+///                 let db = Database::connect(address);
+///
+///                 // Disconnect old database.
+///                 if let Some(db) = current_db.take() {
+///                     db.disconnect();
+///                 }
+///                 current_db = Some(db.clone());
+///
+///                 injector.inject(Ok(db));
+///             }
+///             Err(err) => injector.inject::<Database>(Err(err)),
+///         }
+///
+///         watch_address.changed().await.unwrap();
+///     }
+/// });
+///
+/// // Inject a "foo" database address. The injector will return a database connected to "foo".
+/// injector.inject(Ok(Address("foo")));
+/// # let db1 = timeout(TIMEOUT, async {
+/// watch_db.changed().await.unwrap();
+/// let db1 = watch_db.available().await.unwrap();
+/// # db1
+/// # })
+/// # .await
+/// # .unwrap();
+/// assert_eq!(db1.address(), &Address("foo"));
+/// assert!(db1.is_connected());
+///
+/// // Inject a "bar" database address. The injector will return a database connected to "bar",
+/// // and the first database will be disconnected.
+/// injector.inject(Ok(Address("bar")));
+/// # let db2 = timeout(TIMEOUT, async {
+/// watch_db.changed().await.unwrap();
+/// let db2 = watch_db.available().await.unwrap();
+/// # db2
+/// # })
+/// # .await
+/// # .unwrap();
+/// assert_eq!(db2.address(), &Address("bar"));
+/// assert!(!db1.is_connected());
+/// # }
+/// #
+/// # tokio::runtime::Builder::new_current_thread()
+/// #     .enable_time()
+/// #     .build()
+/// #     .unwrap()
+/// #     .block_on(dox());
+/// ```
 #[derive(Debug, Default)]
 pub struct StateMap {
     states: RwLock<BTreeMap<TypeId, RawState>>,
@@ -143,61 +268,118 @@ impl Injector for StateMap {
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::time::Duration;
 
-    use crate::{injector::InjectorExt, result::ResolutionError};
+    use tokio::time::timeout;
+
+    use crate::injector::InjectorExt;
+    use crate::result::ResolutionError;
 
     use super::*;
 
-    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-    struct Double(pub i32);
+    const TIMEOUT: Duration = Duration::from_millis(500);
 
-    impl Double {
-        fn new(num: i32) -> Self {
-            Self(num * 2)
+    #[derive(Clone, Debug, Default, PartialEq, Eq)]
+    struct Address(&'static str);
+
+    #[derive(Clone, Debug)]
+    struct Database(Arc<DatabaseInner>);
+
+    #[derive(Debug)]
+    struct DatabaseInner {
+        address: Address,
+        connected: AtomicBool,
+    }
+
+    impl Database {
+        fn connect(address: Address) -> Self {
+            Self(Arc::new(DatabaseInner {
+                address,
+                connected: AtomicBool::new(true),
+            }))
+        }
+
+        fn address(&self) -> &Address {
+            &self.0.address
+        }
+
+        fn disconnect(&self) {
+            self.0.connected.store(false, Ordering::Relaxed);
+        }
+
+        fn is_connected(&self) -> bool {
+            self.0.connected.load(Ordering::Relaxed)
         }
     }
 
     #[tokio::test]
-    async fn test_inject() {
+    async fn test_inject_available() {
         let injector = Arc::new(StateMap::new());
-        let cloned_injector = injector.clone();
 
+        let mut watch_db = injector.watch::<Database>();
+
+        timeout(TIMEOUT, async {
+            let err = watch_db.available().await.unwrap_err();
+            assert!(err.is_not_defined_for::<Database>());
+        })
+        .await
+        .unwrap();
+
+        let cloned = injector.clone();
         tokio::spawn(async move {
-            let injector = cloned_injector;
+            let injector = cloned;
 
-            injector.define::<Double>();
-            let mut watch_i32 = injector.watch::<i32>();
+            injector.define::<Database>();
+            let mut watch_address = injector.watch::<Address>();
+            let mut current_db: Option<Database> = None;
 
             loop {
-                let double = watch_i32.available().await.map(Double::new);
-                injector.inject(double);
+                match watch_address.available().await {
+                    Ok(address) => {
+                        let db = Database::connect(address);
 
-                watch_i32.changed().await.unwrap();
+                        if let Some(db) = current_db.take() {
+                            db.disconnect();
+                        }
+                        current_db = Some(db.clone());
+
+                        injector.inject(Ok(db));
+                    }
+                    Err(err) => injector.inject::<Database>(Err(err)),
+                }
+
+                watch_address.changed().await.unwrap();
             }
         });
 
-        let mut watch_double = injector.watch::<Double>();
+        injector.inject(Ok(Address("foo")));
+        let db1 = timeout(TIMEOUT, async {
+            watch_db.changed().await.unwrap();
+            watch_db.available().await.unwrap()
+        })
+        .await
+        .unwrap();
+        assert_eq!(db1.address(), &Address("foo"));
+        assert!(db1.is_connected());
 
-        injector.inject(Ok(32_i32));
-        watch_double.changed().await.unwrap();
-        assert_eq!(watch_double.available().await.unwrap(), Double(64));
+        injector.inject(Ok(Address("bar")));
+        let db2 = timeout(TIMEOUT, async {
+            watch_db.changed().await.unwrap();
+            watch_db.available().await.unwrap()
+        })
+        .await
+        .unwrap();
+        assert_eq!(db2.address(), &Address("bar"));
+        assert!(!db1.is_connected());
 
-        injector.inject::<i32>(Err(ResolutionError::not_defined::<i32>()));
-        watch_double.changed().await.unwrap();
-        assert!(
-            watch_double
-                .available()
-                .await
-                .unwrap_err()
-                .is_not_defined_for::<i32>()
-        );
-
-        injector.inject(Ok(90_i32));
-        watch_double.changed().await.unwrap();
-        assert_eq!(watch_double.available().await.unwrap(), Double(180));
-
-        injector.inject::<i32>(Err(ResolutionError::other(std::fmt::Error)));
-        watch_double.changed().await.unwrap();
-        assert!(watch_double.available().await.unwrap_err().is_other());
+        injector.inject::<Address>(Err(ResolutionError::other("something went wrong")));
+        let err = timeout(TIMEOUT, async {
+            watch_db.changed().await.unwrap();
+            watch_db.available().await.unwrap_err()
+        })
+        .await
+        .unwrap();
+        assert!(err.is_other());
     }
 }
