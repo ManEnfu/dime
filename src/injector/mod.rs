@@ -1,6 +1,7 @@
 //! [`Injector`] trait and common implementations.
 
 use std::any::{TypeId, type_name};
+use std::pin::Pin;
 use std::sync::Arc;
 
 use crate::erased::Erased;
@@ -120,6 +121,34 @@ pub trait InjectorExt: Injector {
 }
 
 impl<I> InjectorExt for I where I: ?Sized + Injector {}
+
+/// A task operating around an injector.
+pub trait InjectorTask {
+    /// Run the task with the given injector.
+    ///
+    /// # Errors
+    ///
+    /// The semantics of the error returned by this method may vary between implementations, but
+    /// in the most common case, this method will return an error if the underlying task encounters
+    /// an unexpected error, panicks, or is otherwise unable to continue in any way.
+    fn run(
+        self,
+        injector: &(dyn Injector + Send + Sync),
+    ) -> Pin<Box<dyn Future<Output = Result<()>> + Send>>;
+}
+
+impl<F, Fut> InjectorTask for F
+where
+    F: FnOnce(&(dyn Injector + Send + Sync)) -> Fut,
+    Fut: Future<Output = Result<()>> + Send + 'static,
+{
+    fn run(
+        self,
+        injector: &(dyn Injector + Send + Sync),
+    ) -> Pin<Box<dyn Future<Output = Result<()>> + Send>> {
+        Box::pin(self(injector))
+    }
+}
 
 #[cfg(test)]
 mod tests {
