@@ -9,6 +9,9 @@ use crate::result::Result;
 pub mod state;
 use state::{RawWatch, Watch};
 
+mod state_map;
+pub use state_map::StateMap;
+
 /// A base trait for container to inject to and retrieve value from.
 pub trait Injector: Send + Sync {
     /// Tells the injector that a type might be injected to it.
