@@ -177,7 +177,7 @@ impl StateMap {
             return;
         }
 
-        let state = RawState::new_undefined(type_id, type_name);
+        let state = RawState::new(type_id, type_name);
         f(&state);
         states.insert(type_id, state);
     }
@@ -228,7 +228,7 @@ impl StateMap {
             return state.watch();
         }
 
-        let state = RawState::new_undefined(type_id, type_name);
+        let state = RawState::new(type_id, type_name);
         f(&state);
         let watch = state.watch();
         states.insert(type_id, state);

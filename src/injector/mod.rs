@@ -170,7 +170,7 @@ mod tests {
             }
 
             fn raw_watch_by_type_id(&self, type_id: TypeId, type_name: &'static str) -> RawWatch {
-                state::RawState::new_undefined(type_id, type_name).watch()
+                state::RawState::new(type_id, type_name).watch()
             }
         }
 

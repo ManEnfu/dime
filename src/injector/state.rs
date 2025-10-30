@@ -1,6 +1,6 @@
 //! Type value states.
 
-use std::any::TypeId;
+use std::any::{TypeId, type_name};
 use std::marker::PhantomData;
 
 use tokio::sync::watch;
@@ -91,23 +91,9 @@ impl RawState {
         }
     }
 
-    /// Creates a new state-watch pair that has not been defined.
-    pub fn new_undefined(type_id: TypeId, type_name: &'static str) -> Self {
+    /// Creates a new, undefined state.
+    pub fn new(type_id: TypeId, type_name: &'static str) -> Self {
         Self::new_inner(Inner::Undefined, type_id, type_name)
-    }
-
-    /// Creates a new state-watch pair that has been defined and is ready to receive values.
-    pub fn new_defined(type_id: TypeId, type_name: &'static str) -> Self {
-        Self::new_inner(Inner::Pending, type_id, type_name)
-    }
-
-    /// Creates a new state-watch pair with a value already available.
-    ///
-    /// # Panics
-    ///
-    /// See [`Injector::inject_by_type_id`](crate::injector::Injector::inject_by_type_id).
-    pub fn new_value(type_id: TypeId, type_name: &'static str, value: Result<Erased>) -> Self {
-        Self::new_inner(Inner::Ready(value), type_id, type_name)
     }
 
     /// Tells the state a type might be injected to it.
@@ -230,10 +216,25 @@ impl RawWatch {
     }
 }
 
+impl<T> Default for State<T>
+where
+    T: Clone + Send + Sync + 'static,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T> State<T>
 where
     T: Clone + Send + Sync + 'static,
 {
+    /// Creates a new, undefined state
+    pub fn new() -> Self {
+        let raw = RawState::new(TypeId::of::<T>(), type_name::<T>());
+        Self::from_raw(raw)
+    }
+
     /// Creates a state from [`RawState`].
     ///
     /// # Panics
