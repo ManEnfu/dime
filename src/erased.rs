@@ -28,7 +28,7 @@ impl Erased {
     /// itself as error.
     pub fn downcast<T>(self) -> Result<T, Self>
     where
-        T: Clone + Send + Sync + 'static,
+        T: 'static,
     {
         if (&*self.0 as &dyn Any).is::<T>() {
             #[expect(clippy::missing_panics_doc, reason = "already checked")]
