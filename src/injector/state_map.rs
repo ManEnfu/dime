@@ -24,54 +24,55 @@ use super::state::RawWatch;
 /// # use tokio::time::timeout;
 ///
 /// use dime::injector::{StateMap, InjectorExt};
-/// #
+/// use dime::result::ResolutionError;
+///
 /// # const TIMEOUT: Duration = Duration::from_millis(500);
-///
-/// #[derive(Clone, Debug, Default, PartialEq, Eq)]
-/// struct Address(&'static str);
-///
-/// #[derive(Clone, Debug)]
-/// struct Database(Arc<DatabaseInner>);
-///
-/// #[derive(Debug)]
-/// struct DatabaseInner {
-///     address: Address,
-///     connected: AtomicBool,
-/// }
-///
-/// impl Database {
-///     fn connect(address: Address) -> Self {
-///         Self(Arc::new(DatabaseInner {
-///             address,
-///             connected: AtomicBool::new(true),
-///         }))
-///     }
-///
-///     fn address(&self) -> &Address {
-///         &self.0.address
-///     }
-///
-///     fn disconnect(&self) {
-///         self.0.connected.store(false, Ordering::Relaxed);
-///     }
-///
-///     fn is_connected(&self) -> bool {
-///         self.0.connected.load(Ordering::Relaxed)
-///     }
-/// }
-///
-/// # async fn dox() {
+/// #
+/// # #[derive(Clone, Debug, Default, PartialEq, Eq)]
+/// # struct Address(&'static str);
+/// #
+/// # #[derive(Clone, Debug)]
+/// # struct Database(Arc<DatabaseInner>);
+/// #
+/// # #[derive(Debug)]
+/// # struct DatabaseInner {
+/// #     address: Address,
+/// #     connected: AtomicBool,
+/// # }
+/// #
+/// # impl Database {
+/// #     fn connect(address: Address) -> Self {
+/// #         Self(Arc::new(DatabaseInner {
+/// #             address,
+/// #             connected: AtomicBool::new(true),
+/// #         }))
+/// #     }
+/// #
+/// #     fn address(&self) -> &Address {
+/// #         &self.0.address
+/// #     }
+/// #
+/// #     fn disconnect(&self) {
+/// #         self.0.connected.store(false, Ordering::Relaxed);
+/// #     }
+/// #
+/// #     fn is_connected(&self) -> bool {
+/// #         self.0.connected.load(Ordering::Relaxed)
+/// #     }
+/// # }
+/// #
+/// # #[tokio::main]
+/// # async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 /// let injector = Arc::new(StateMap::new());
 ///
 /// let mut watch_db = injector.watch::<Database>();
 ///
 /// // If we try to request a database value, it will return an error!
 /// # timeout(TIMEOUT, async {
-/// let err = watch_db.available().await.unwrap_err();
-/// assert!(err.is_not_defined_for::<Database>());
+/// let res = watch_db.available().await;
+/// assert!(res.is_err_and(|err| err.is_not_defined_for::<Database>()));
 /// # })
-/// # .await
-/// # .unwrap();
+/// # .await?;
 ///
 /// // Spawn an async task that will connect to our database from the injected address.
 /// let cloned = injector.clone();
@@ -99,19 +100,20 @@ use super::state::RawWatch;
 ///             Err(err) => injector.inject::<Database>(Err(err)),
 ///         }
 ///
-///         watch_address.changed().await.unwrap();
+///         watch_address.changed().await?;
 ///     }
+///
+///     Ok::<(), ResolutionError>(())
 /// });
 ///
 /// // Inject a "foo" database address. The injector will return a database connected to "foo".
 /// injector.inject(Ok(Address("foo")));
 /// # let db1 = timeout(TIMEOUT, async {
-/// watch_db.changed().await.unwrap();
-/// let db1 = watch_db.available().await.unwrap();
-/// # db1
+/// watch_db.changed().await?;
+/// let db1 = watch_db.available().await?;
+/// # Ok::<Database, ResolutionError>(db1)
 /// # })
-/// # .await
-/// # .unwrap();
+/// # .await??;
 /// assert_eq!(db1.address(), &Address("foo"));
 /// assert!(db1.is_connected());
 ///
@@ -119,25 +121,26 @@ use super::state::RawWatch;
 /// // and the first database will be disconnected.
 /// injector.inject(Ok(Address("bar")));
 /// # let db2 = timeout(TIMEOUT, async {
-/// watch_db.changed().await.unwrap();
-/// let db2 = watch_db.available().await.unwrap();
-/// # db2
+/// watch_db.changed().await?;
+/// let db2 = watch_db.available().await?;
+/// # Ok::<Database, ResolutionError>(db2)
 /// # })
-/// # .await
-/// # .unwrap();
+/// # .await??;
 /// assert_eq!(db2.address(), &Address("bar"));
 /// assert!(!db1.is_connected());
-/// # }
 /// #
-/// # tokio::runtime::Builder::new_current_thread()
-/// #     .enable_time()
-/// #     .build()
-/// #     .unwrap()
-/// #     .block_on(dox());
+/// # Ok(())
+/// # }
 /// ```
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct StateMap {
     states: RwLock<BTreeMap<TypeId, RawState>>,
+}
+
+impl Default for StateMap {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl StateMap {
