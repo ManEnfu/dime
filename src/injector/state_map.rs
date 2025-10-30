@@ -2,12 +2,9 @@ use std::any::{TypeId, type_name};
 use std::collections::BTreeMap;
 use std::sync::RwLock;
 
-use crate::erased::Erased;
-use crate::injector::Injector;
-use crate::injector::state::{RawState, StateRef, Watch};
+use crate::injector::state::{RawState, RawWatch, StateRef, Watch};
+use crate::injector::{Injector, state};
 use crate::result::Result;
-
-use super::state::RawWatch;
 
 /// A Simple injector backed by [`BTreeMap`].
 ///
@@ -23,7 +20,7 @@ use super::state::RawWatch;
 /// #
 /// # use tokio::time::timeout;
 ///
-/// use dime::injector::{StateMap, InjectorExt};
+/// use dime::injector::{StateMap, Injector, Watch};
 /// use dime::result::ResolutionError;
 ///
 /// # const TIMEOUT: Duration = Duration::from_millis(500);
@@ -69,7 +66,7 @@ use super::state::RawWatch;
 ///
 /// // If we try to request a database value, it will return an error!
 /// # timeout(TIMEOUT, async {
-/// let res = watch_db.available().await;
+/// let res = watch_db.wait().await;
 /// assert!(res.is_err_and(|err| err.is_not_defined_for::<Database>()));
 /// # })
 /// # .await?;
@@ -84,7 +81,7 @@ use super::state::RawWatch;
 ///     let mut current_db: Option<Database> = None;
 ///
 ///     loop {
-///         match watch_address.available().await {
+///         match watch_address.wait().await {
 ///             Ok(address) => {
 ///                 // Connect to a new database.
 ///                 let db = Database::connect(address);
@@ -110,7 +107,7 @@ use super::state::RawWatch;
 /// injector.inject(Ok(Address("foo")));
 /// # let db1 = timeout(TIMEOUT, async {
 /// watch_db.changed().await?;
-/// let db1 = watch_db.available().await?;
+/// let db1 = watch_db.wait().await?;
 /// # Ok::<Database, ResolutionError>(db1)
 /// # })
 /// # .await??;
@@ -122,7 +119,7 @@ use super::state::RawWatch;
 /// injector.inject(Ok(Address("bar")));
 /// # let db2 = timeout(TIMEOUT, async {
 /// watch_db.changed().await?;
-/// let db2 = watch_db.available().await?;
+/// let db2 = watch_db.wait().await?;
 /// # Ok::<Database, ResolutionError>(db2)
 /// # })
 /// # .await??;
@@ -151,15 +148,12 @@ impl StateMap {
         }
     }
 
-    /// Calls a closure on a state of the given type, creating a new state if one does not yet
-    /// exists.
-    pub fn with_state_by_type_id<F>(&self, type_id: TypeId, type_name: &'static str, f: F)
+    fn raw_with_state_by_type_id<F>(&self, type_id: TypeId, type_name: &'static str, f: F)
     where
         F: FnOnce(&RawState),
     {
         {
             // TODO: use non-poisoning alternative
-            #[expect(clippy::missing_panics_doc)]
             let states = self.states.read().unwrap();
             if let Some(state) = states.get(&type_id) {
                 f(state);
@@ -168,7 +162,6 @@ impl StateMap {
         }
 
         // TODO: use non-poisoning alternative
-        #[expect(clippy::missing_panics_doc)]
         let mut states = self.states.write().unwrap();
         // Some other thread might insert a state between the time read lock is released and the
         // write lock is acquired. If that's the case, use the existing state.
@@ -184,22 +177,17 @@ impl StateMap {
 
     /// Calls a closure on a state of the given type, creating a new state if one does not yet
     /// exists.
-    ///
-    /// This method is the type-safe variant of
-    /// [`with_state_by_type_id`](Self::with_state_by_type_id).
     pub fn with_state<T, F>(&self, f: F)
     where
         T: Clone + Send + Sync + 'static,
         F: FnOnce(StateRef<'_, T>),
     {
-        self.with_state_by_type_id(TypeId::of::<T>(), type_name::<T>(), |raw| {
+        self.raw_with_state_by_type_id(TypeId::of::<T>(), type_name::<T>(), |raw| {
             f(StateRef::from_raw(raw));
         });
     }
 
-    /// Calls a closure on a state of the given type and returns the watch to it, creating a new
-    /// state if one does not yet exists.
-    pub fn with_state_and_watch_by_type_id<F>(
+    fn raw_with_state_and_watch_by_type_id<F>(
         &self,
         type_id: TypeId,
         type_name: &'static str,
@@ -210,7 +198,6 @@ impl StateMap {
     {
         {
             // TODO: use non-poisoning alternative
-            #[expect(clippy::missing_panics_doc)]
             let states = self.states.read().unwrap();
             if let Some(state) = states.get(&type_id) {
                 f(state);
@@ -219,7 +206,6 @@ impl StateMap {
         }
 
         // TODO: use non-poisoning alternative
-        #[expect(clippy::missing_panics_doc)]
         let mut states = self.states.write().unwrap();
         // Some other thread might insert a state between the time read lock is released and the
         // write lock is acquired. If that's the case, use the existing state.
@@ -237,16 +223,13 @@ impl StateMap {
 
     /// Calls a closure on a state of the given type and returns the watch to it, creating a new
     /// state if one does not yet exists.
-    ///
-    /// This method is the type-safe variant of
-    /// [`with_state_and_watch_by_type_id`](Self::with_state_and_watch_by_type_id).
     pub fn with_state_and_watch<T, F>(&self, f: F) -> Watch<T>
     where
         T: Clone + Send + Sync + 'static,
         F: FnOnce(StateRef<'_, T>),
     {
         let raw =
-            self.with_state_and_watch_by_type_id(TypeId::of::<T>(), type_name::<T>(), |raw| {
+            self.raw_with_state_and_watch_by_type_id(TypeId::of::<T>(), type_name::<T>(), |raw| {
                 f(StateRef::from_raw(raw));
             });
 
@@ -255,16 +238,32 @@ impl StateMap {
 }
 
 impl Injector for StateMap {
-    fn define_by_type_id(&self, type_id: TypeId, type_name: &'static str) {
-        self.with_state_by_type_id(type_id, type_name, RawState::define);
+    type Watch<T: Send + 'static> = state::Watch<T>;
+
+    #[inline]
+    fn define<T>(&self)
+    where
+        T: Clone + Send + Sync + 'static,
+    {
+        self.with_state::<T, _>(|state| state.define());
     }
 
-    fn inject_by_type_id(&self, type_id: TypeId, type_name: &'static str, value: Result<Erased>) {
-        self.with_state_by_type_id(type_id, type_name, |state| state.inject(value));
+    #[inline]
+    fn inject<T>(&self, value: Result<T>)
+    where
+        T: Clone + Send + Sync + 'static,
+    {
+        self.with_state(|state| state.inject(value));
     }
 
-    fn raw_watch_by_type_id(&self, type_id: TypeId, type_name: &'static str) -> RawWatch {
-        self.with_state_and_watch_by_type_id(type_id, type_name, |_| {})
+    #[inline]
+    fn watch<T>(&self) -> Self::Watch<T>
+    where
+        T: Clone + Send + Sync + 'static,
+    {
+        let raw =
+            self.raw_with_state_and_watch_by_type_id(TypeId::of::<T>(), type_name::<T>(), |_| {});
+        Watch::from_raw(raw)
     }
 }
 
@@ -276,7 +275,7 @@ mod tests {
 
     use tokio::time::timeout;
 
-    use crate::injector::InjectorExt;
+    use crate::injector::Watch;
     use crate::result::ResolutionError;
 
     use super::*;
@@ -317,13 +316,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_inject_available() {
+    async fn test_inject_db() {
         let injector = Arc::new(StateMap::new());
 
         let mut watch_db = injector.watch::<Database>();
 
         timeout(TIMEOUT, async {
-            let err = watch_db.available().await.unwrap_err();
+            let err = watch_db.wait().await.unwrap_err();
             assert!(err.is_not_defined_for::<Database>());
         })
         .await
@@ -338,7 +337,7 @@ mod tests {
             let mut current_db: Option<Database> = None;
 
             loop {
-                match watch_address.available().await {
+                match watch_address.wait().await {
                     Ok(address) => {
                         let db = Database::connect(address);
 
@@ -359,7 +358,7 @@ mod tests {
         injector.inject(Ok(Address("foo")));
         let db1 = timeout(TIMEOUT, async {
             watch_db.changed().await.unwrap();
-            watch_db.available().await.unwrap()
+            watch_db.wait().await.unwrap()
         })
         .await
         .unwrap();
@@ -369,7 +368,7 @@ mod tests {
         injector.inject(Ok(Address("bar")));
         let db2 = timeout(TIMEOUT, async {
             watch_db.changed().await.unwrap();
-            watch_db.available().await.unwrap()
+            watch_db.wait().await.unwrap()
         })
         .await
         .unwrap();
@@ -379,7 +378,7 @@ mod tests {
         injector.inject::<Address>(Err(ResolutionError::other("something went wrong")));
         let err = timeout(TIMEOUT, async {
             watch_db.changed().await.unwrap();
-            watch_db.available().await.unwrap_err()
+            watch_db.wait().await.unwrap_err()
         })
         .await
         .unwrap();

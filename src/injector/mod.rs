@@ -1,64 +1,73 @@
 //! [`Injector`] trait and common implementations.
 
-use std::any::{TypeId, type_name};
+use std::any::type_name;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use crate::erased::Erased;
 use crate::result::Result;
 
 pub mod state;
-use state::{RawWatch, Watch};
+
+mod watch;
+pub use watch::Watch;
 
 mod state_map;
 pub use state_map::StateMap;
 
 /// A base trait for container to inject to and retrieve value from.
 pub trait Injector {
+    type Watch<T: Send + 'static>: Watch<T>;
+
     /// Tells the injector that a type might be injected to it.
     ///
     /// Depending on the implementation, Trying to retrieve value (e.g. by calling
-    /// [`Watch::available`]) prior to calling this method for its type may panic, wait forever,
+    /// [`wait`](Watch::wait)) prior to calling this method for its type may panic, wait forever,
     /// or return [`ResolutionError::NotDefined`](crate::result::ResolutionError::NotDefined).
     /// Calling this method ensures that retrieving value of this type will wait until a value
     /// is available.
-    fn define_by_type_id(&self, type_id: TypeId, type_name: &'static str);
+    fn define<T>(&self)
+    where
+        T: Clone + Send + Sync + 'static;
 
     /// Inject a value of a given type into the injector.
-    ///
-    /// # Panics
-    ///
-    /// The caller must ensure that the type of `value` and the type identified by `type_id`
-    /// match. Breaking this contract may cause panic or other sorts of problems.
-    /// However as, this method is safe, the implementor must ensure that calls with incorrect
-    /// arguments should *not* cause undefined behavior.
-    fn inject_by_type_id(&self, type_id: TypeId, type_name: &'static str, value: Result<Erased>);
+    fn inject<T>(&self, value: Result<T>)
+    where
+        T: Clone + Send + Sync + 'static;
 
     /// Watches for values of a given type in the injector.
-    ///
-    /// # Panics
-    ///
-    /// The implementation must ensure that the type of values received by the returned
-    /// [`RawWatch`] matches with the type identified by `type_id`. Otherwise, breaking this
-    /// contract may cause panic or other sorts of problems, but should *not* cause undefined
-    /// behavior.
-    fn raw_watch_by_type_id(&self, type_id: TypeId, type_name: &'static str) -> RawWatch;
+    fn watch<T>(&self) -> Self::Watch<T>
+    where
+        T: Clone + Send + Sync + 'static;
 }
 
 impl<I> Injector for Arc<I>
 where
     I: Injector,
 {
-    fn define_by_type_id(&self, type_id: TypeId, type_name: &'static str) {
-        (**self).define_by_type_id(type_id, type_name);
+    type Watch<T: Send + 'static> = I::Watch<T>;
+
+    #[inline]
+    fn define<T>(&self)
+    where
+        T: Clone + Send + Sync + 'static,
+    {
+        (**self).define::<T>();
     }
 
-    fn inject_by_type_id(&self, type_id: TypeId, type_name: &'static str, value: Result<Erased>) {
-        (**self).inject_by_type_id(type_id, type_name, value);
+    #[inline]
+    fn inject<T>(&self, value: Result<T>)
+    where
+        T: Clone + Send + Sync + 'static,
+    {
+        (**self).inject(value);
     }
 
-    fn raw_watch_by_type_id(&self, type_id: TypeId, type_name: &'static str) -> RawWatch {
-        (**self).raw_watch_by_type_id(type_id, type_name)
+    #[inline]
+    fn watch<T>(&self) -> Self::Watch<T>
+    where
+        T: Clone + Send + Sync + 'static,
+    {
+        (**self).watch()
     }
 }
 
@@ -66,61 +75,32 @@ impl<I> Injector for Box<I>
 where
     I: Injector,
 {
-    fn define_by_type_id(&self, type_id: TypeId, type_name: &'static str) {
-        (**self).define_by_type_id(type_id, type_name);
-    }
+    type Watch<T: Send + 'static> = I::Watch<T>;
 
-    fn inject_by_type_id(&self, type_id: TypeId, type_name: &'static str, value: Result<Erased>) {
-        (**self).inject_by_type_id(type_id, type_name, value);
-    }
-
-    fn raw_watch_by_type_id(&self, type_id: TypeId, type_name: &'static str) -> RawWatch {
-        (**self).raw_watch_by_type_id(type_id, type_name)
-    }
-}
-
-/// Type-safe methods for [`Injector`].
-pub trait InjectorExt: Injector {
-    /// Tells the injector that a type might be injected to it.
-    ///
-    /// Depending on the implementation, Trying to retrieve value (e.g. by calling
-    /// [`Watch::available`]) prior to calling this method for its type may panic, wait forever,
-    /// or return [`ResolutionError::NotDefined`](crate::result::ResolutionError::NotDefined).
-    /// Calling this method ensures that retrieving value of this type will wait until a value
-    /// is available.
-    ///
-    /// This method is the type-safe variant of [`Injector::define_by_type_id`].
+    #[inline]
     fn define<T>(&self)
     where
         T: Clone + Send + Sync + 'static,
     {
-        self.define_by_type_id(TypeId::of::<T>(), type_name::<T>());
+        (**self).define::<T>();
     }
 
-    /// Inject a value of a given type into the injector.
-    ///
-    /// This method is the type-safe variant of [`Injector::inject_by_type_id`].
+    #[inline]
     fn inject<T>(&self, value: Result<T>)
     where
         T: Clone + Send + Sync + 'static,
     {
-        self.inject_by_type_id(TypeId::of::<T>(), type_name::<T>(), value.map(Erased::new));
+        (**self).inject(value);
     }
 
-    /// Watches for values of a given type in the injector.
-    ///
-    /// This method is the type-safe variant of [`Injector::raw_watch_by_type_id`].
-    fn watch<T>(&self) -> Watch<T>
+    #[inline]
+    fn watch<T>(&self) -> Self::Watch<T>
     where
         T: Clone + Send + Sync + 'static,
     {
-        let raw = self.raw_watch_by_type_id(TypeId::of::<T>(), type_name::<T>());
-
-        Watch::from_raw(raw)
+        (**self).watch()
     }
 }
-
-impl<I> InjectorExt for I where I: ?Sized + Injector {}
 
 /// A task operating around an injector.
 pub trait InjectorTask<I> {
@@ -209,39 +189,5 @@ impl<I> InjectorTask<I> for InjectorTaskObject<I> {
     #[inline]
     fn run(self, injector: &I) -> Self::Future {
         self.boxed.run(injector)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_dyn_compatible() {
-        pub struct FakeInjector;
-
-        impl Injector for FakeInjector {
-            fn define_by_type_id(&self, _type_id: TypeId, _type_name: &'static str) {}
-
-            fn inject_by_type_id(
-                &self,
-                _type_id: TypeId,
-                _type_name: &'static str,
-                _value: Result<Erased>,
-            ) {
-            }
-
-            fn raw_watch_by_type_id(&self, type_id: TypeId, type_name: &'static str) -> RawWatch {
-                state::RawState::new(type_id, type_name).watch()
-            }
-        }
-
-        fn check_dyn_compatible(injector: &dyn Injector) {
-            injector.define::<i32>();
-            injector.inject(Ok("hello"));
-            let _ = injector.watch::<bool>();
-        }
-
-        check_dyn_compatible(&FakeInjector);
     }
 }
