@@ -43,6 +43,16 @@ impl Erased {
             Err(self)
         }
     }
+
+    /// Returns the reference to the underlying [`Any`] trait object.
+    pub fn as_any(&self) -> &(dyn Any + Send + Sync) {
+        &*self.0
+    }
+
+    /// Returns the mutalbe reference to the underlying [`Any`] trait object.
+    pub fn as_mut_any(&mut self) -> &mut (dyn Any + Send + Sync) {
+        &mut *self.0
+    }
 }
 
 impl std::ops::Deref for Erased {
@@ -103,37 +113,38 @@ mod tests {
     #[test]
     fn test_downcast_ref() {
         let erased = Erased::new("Hello".to_string());
-        let got = erased.downcast_ref::<String>().unwrap();
+        let got = erased.as_any().downcast_ref::<String>().unwrap();
         assert_eq!(got, "Hello");
     }
 
     #[test]
     fn test_downcast_ref_err() {
         let erased = Erased::new("Hello".to_string());
-        assert!(erased.downcast_ref::<i32>().is_none());
+        assert!(erased.as_any().downcast_ref::<i32>().is_none());
     }
 
     #[test]
     fn test_downcast_mut() {
         let mut erased = Erased::new("Hello".to_string());
         erased
+            .as_mut_any()
             .downcast_mut::<String>()
             .unwrap()
             .push_str(", world!");
-        let got = erased.downcast_ref::<String>().unwrap();
+        let got = erased.as_any().downcast_ref::<String>().unwrap();
         assert_eq!(got, "Hello, world!");
     }
 
     #[test]
     fn test_downcast_mut_err() {
         let mut erased = Erased::new("Hello".to_string());
-        assert!(erased.downcast_mut::<i32>().is_none());
+        assert!(erased.as_mut_any().downcast_mut::<i32>().is_none());
     }
 
     #[test]
     fn test_type_id() {
         let erased = Erased::new("Hello".to_string());
-        assert_eq!(erased.type_id(), TypeId::of::<String>());
+        assert_eq!(erased.as_any().type_id(), TypeId::of::<String>());
     }
 
     #[test]

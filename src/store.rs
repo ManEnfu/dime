@@ -41,7 +41,7 @@ impl Store {
     /// Inserts an [`Erased`] value into the store.
     #[inline]
     pub fn insert_erased(&mut self, value: Erased) -> (TypeId, Option<Erased>) {
-        let type_id = (*value).type_id();
+        let type_id = value.as_any().type_id();
         (type_id, self.0.insert(type_id, value))
     }
 
@@ -55,7 +55,8 @@ impl Store {
                 clippy::missing_panics_doc,
                 reason = "it is guaranteed that v.type_id() == TypeId::of::<T>()"
             )]
-            (*v).downcast_ref()
+            v.as_any()
+                .downcast_ref()
                 .expect("`the returned value should be of type `T`")
         })
     }
@@ -76,7 +77,8 @@ impl Store {
                 clippy::missing_panics_doc,
                 reason = "it is guaranteed that v.type_id() == TypeId::of::<T>()"
             )]
-            (*v).downcast_mut()
+            v.as_mut_any()
+                .downcast_mut()
                 .expect("`the returned value should be of type `T`")
         })
     }
