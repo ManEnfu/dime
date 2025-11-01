@@ -16,7 +16,7 @@ pub use state_map::StateMap;
 
 /// A base trait for container to inject to and retrieve value from.
 pub trait Injector {
-    type Watch<T: Send + 'static>: Watch<T>;
+    type Watch<T: Send + 'static>: Watch<Ty = T>;
 
     /// Tells the injector that a type might be injected to it.
     ///

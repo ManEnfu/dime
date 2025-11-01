@@ -293,10 +293,12 @@ where
     }
 }
 
-impl<T> super::watch::Watch<T> for Watch<T>
+impl<T> super::watch::Watch for Watch<T>
 where
     T: 'static + Send,
 {
+    type Ty = T;
+
     fn current(&self) -> Result<T> {
         self.raw
             .current()

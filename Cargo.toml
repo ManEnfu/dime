@@ -5,11 +5,11 @@ edition = "2024"
 
 [dependencies]
 futures = { version = "0.3" }
-tokio = { version = "1.47", default-features = false, features = ["sync"] }
+tokio = { version = "1.47", default-features = false, features = ["sync", "macros"] }
 
 [features]
 default = ["tokio"]
 tokio = ["tokio/rt"]
 
 [dev-dependencies]
-tokio = { version = "1.47", features = ["macros", "rt", "rt-multi-thread", "test-util"] }
+tokio = { version = "1.47", features = ["macros", "rt", "rt-multi-thread", "test-util", "time"] }
