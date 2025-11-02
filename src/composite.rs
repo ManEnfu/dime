@@ -42,6 +42,18 @@ where
 /// A wrapper to make any type implement [`Composite`].
 pub struct Component<T>(pub T);
 
+// We can assume that injectors always have `()` unit component, so injecting `()` into any
+// injector is no-op and watching for `()` always immediately return `Ok(())`.
+impl<I> Composite<I> for () {
+    type Watch = ();
+
+    fn promise_to(_injector: &I) {}
+
+    fn inject_to(_result: Result<Self>, _injector: &I) {}
+
+    fn watch_from(_injector: &I) -> Self::Watch {}
+}
+
 impl<I, T> Composite<I> for Component<T>
 where
     I: Injector,

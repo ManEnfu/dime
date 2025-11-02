@@ -61,6 +61,35 @@ pub trait Watch {
     fn changed(&mut self) -> impl Future<Output = Result<()>> + Send;
 }
 
+// We can produce `()` out of thin air.
+impl Watch for () {
+    type Ty = ();
+
+    fn current(&self) -> Result<Self::Ty> {
+        Ok(())
+    }
+
+    fn current_optional(&self) -> Result<Option<Self::Ty>> {
+        Ok(Some(()))
+    }
+
+    async fn wait(&mut self) -> Result<Self::Ty> {
+        Ok(())
+    }
+
+    async fn wait_optional(&mut self) -> Result<Option<Self::Ty>> {
+        Ok(Some(()))
+    }
+
+    async fn wait_always(&mut self) -> Result<Self::Ty> {
+        Ok(())
+    }
+
+    fn changed(&mut self) -> impl Future<Output = Result<()>> + Send {
+        std::future::pending()
+    }
+}
+
 macro_rules! impl_watch_tuple {
     ($($ty:ident),*) => {
         #[allow(non_snake_case)]
