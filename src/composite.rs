@@ -5,6 +5,9 @@ use std::sync::Arc;
 use crate::injector::{Injector, Watch};
 use crate::result::{ResolutionError, Result};
 
+mod constructor;
+pub use constructor::{AsyncConstructor, AsyncConstructorTask, Constructor, ConstructorTask};
+
 /// A trait for types that may consists of multiple component.
 pub trait Composite<I>: Sized {
     type Watch: Watch<Ty = Self>;
@@ -40,6 +43,7 @@ where
 }
 
 /// A wrapper to make any type implement [`Composite`].
+#[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Component<T>(pub T);
 
 // We can assume that injectors always have `()` unit component, so injecting `()` into any
