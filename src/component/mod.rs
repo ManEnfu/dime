@@ -81,7 +81,6 @@ where
 
 impl<I, T> Composite<I> for Option<T>
 where
-    I: Injector,
     T: Composite<I> + Clone + Send + Sync + 'static,
     T::Watch: Send,
 {
@@ -105,14 +104,13 @@ where
 
 impl<I, T> Composite<I> for Result<T>
 where
-    I: Injector,
     T: Composite<I> + Clone + Send + Sync + 'static,
     T::Watch: Send,
 {
     type Watch = ResultWatch<T::Watch>;
 
     fn promise_to(injector: &I) {
-        injector.define::<T>();
+        T::promise_to(injector);
     }
 
     fn inject_to(result: Result<Self>, injector: &I) {
@@ -121,6 +119,33 @@ where
 
     fn watch_from(injector: &I) -> Self::Watch {
         ResultWatch::new(T::watch_from(injector))
+    }
+}
+
+/// Ignores waiting on a value of the wrapped component.
+///
+/// Calling any method from the associated watch always returns immediately with the current value
+/// stored in the injector state.
+#[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Current<T>(pub T);
+
+impl<I, T> Composite<I> for Current<T>
+where
+    T: Composite<I>,
+    T::Watch: Send,
+{
+    type Watch = CurrentWatch<T::Watch>;
+
+    fn promise_to(injector: &I) {
+        T::promise_to(injector);
+    }
+
+    fn inject_to(result: Result<Self>, injector: &I) {
+        T::inject_to(result.map(|v| v.0), injector);
+    }
+
+    fn watch_from(injector: &I) -> Self::Watch {
+        CurrentWatch::new(T::watch_from(injector))
     }
 }
 
@@ -305,5 +330,55 @@ where
 
     async fn changed(&mut self) -> Result<()> {
         self.0.changed().await
+    }
+}
+
+/// Watches over [`Current`] values.
+#[doc(hidden)]
+#[derive(Debug, Default, Clone)]
+pub struct CurrentWatch<W>(W);
+
+impl<W> CurrentWatch<W> {
+    /// Wraps a watch in a new `InhibitChangedWatch`
+    pub const fn new(watch: W) -> Self {
+        Self(watch)
+    }
+
+    /// Extract the underlying watch from `self`.
+    pub fn into_inner(self) -> W {
+        self.0
+    }
+}
+
+impl<W> Watch for CurrentWatch<W>
+where
+    W: Watch + Send,
+{
+    type Ty = Current<W::Ty>;
+
+    fn current(&self) -> Result<Self::Ty> {
+        self.0.current().map(Current)
+    }
+
+    fn current_optional(&self) -> Result<Option<Self::Ty>> {
+        let value = self.0.current_optional()?;
+        Ok(value.map(Current))
+    }
+
+    async fn wait(&mut self) -> Result<Self::Ty> {
+        self.0.current().map(Current)
+    }
+
+    async fn wait_optional(&mut self) -> Result<Option<Self::Ty>> {
+        let value = self.0.current_optional()?;
+        Ok(value.map(Current))
+    }
+
+    async fn wait_always(&mut self) -> Result<Self::Ty> {
+        self.0.current().map(Current)
+    }
+
+    fn changed(&mut self) -> impl Future<Output = Result<()>> + Send {
+        std::future::pending()
     }
 }
