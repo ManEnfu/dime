@@ -19,7 +19,4 @@ pub mod runtime;
 
 pub mod injector;
 
-pub mod composite;
-
 pub mod component;
-pub mod constructor;

@@ -1,4 +1,4 @@
-//! Composite components.
+//! Type-safe component system.
 
 use std::sync::Arc;
 

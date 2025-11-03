@@ -1,10 +1,9 @@
-use std::{marker::PhantomData, pin::Pin};
+use std::marker::PhantomData;
+use std::pin::Pin;
 
-use crate::{
-    composite::Composite,
-    injector::{Injector, InjectorTask, Watch},
-    result::Result,
-};
+use crate::component::Composite;
+use crate::injector::{Injector, InjectorTask, Watch};
+use crate::result::Result;
 
 /// Constructs a component from smaller components.
 pub trait Constructor<T> {
@@ -196,7 +195,8 @@ where
 mod tests {
     use std::sync::Arc;
 
-    use crate::{composite::Component, injector::StateMap};
+    use crate::component::Component;
+    use crate::injector::StateMap;
 
     use super::*;
 
