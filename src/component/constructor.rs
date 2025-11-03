@@ -143,6 +143,7 @@ where
                     Err(err) => Err(err),
                 };
                 C::Constructed::inject_to(output, &injector);
+                watch.changed().await?;
             }
         })
     }
@@ -186,6 +187,7 @@ where
                     Err(err) => Err(err),
                 };
                 C::Constructed::inject_to(output, &injector);
+                watch.changed().await?;
             }
         })
     }
