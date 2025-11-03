@@ -156,22 +156,7 @@ macro_rules! impl_composite_tuple {
     }
 }
 
-impl_composite_tuple!(T1);
-impl_composite_tuple!(T1, T2);
-impl_composite_tuple!(T1, T2, T3);
-impl_composite_tuple!(T1, T2, T3, T4);
-impl_composite_tuple!(T1, T2, T3, T4, T5);
-impl_composite_tuple!(T1, T2, T3, T4, T5, T6);
-// impl_composite_tuple!(T1, T2, T3, T4, T5, T6, T7);
-// impl_composite_tuple!(T1, T2, T3, T4, T5, T6, T7, T8);
-// impl_composite_tuple!(T1,T2,T3,T4,T5,T6,T7,T8,T9);
-// impl_composite_tuple!(T1,T2,T3,T4,T5,T6,T7,T8,T9,T10);
-// impl_composite_tuple!(T1,T2,T3,T4,T5,T6,T7,T8,T9,T10,T11);
-// impl_composite_tuple!(T1,T2,T3,T4,T5,T6,T7,T8,T9,T10,T11,T12);
-// impl_composite_tuple!(T1,T2,T3,T4,T5,T6,T7,T8,T9,T10,T11,T12,T13);
-// impl_composite_tuple!(T1,T2,T3,T4,T5,T6,T7,T8,T9,T10,T11,T12,T13,T14);
-// impl_composite_tuple!(T1,T2,T3,T4,T5,T6,T7,T8,T9,T10,T11,T12,T13,T14,T15);
-// impl_composite_tuple!(T1,T2,T3,T4,T5,T6,T7,T8,T9,T10,T11,T12,T13,T14,T15,T16);
+apply_tuples!(impl_composite_tuple);
 
 /// Watches over values wrapped in [`Component`].
 #[doc(hidden)]

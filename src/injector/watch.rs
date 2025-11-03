@@ -95,87 +95,110 @@ macro_rules! impl_watch_tuple {
         #[allow(non_snake_case)]
         #[allow(clippy::too_many_arguments)]
         #[allow(clippy::type_complexity)]
-        impl<$($ty,)*> Watch for ($($ty,)*)
+        const _: () = {
+            fn unwrap_option_tuple<$($ty,)*>($($ty: Option<$ty>,)*) -> Option<($($ty,)*)> {
+                Some(($($ty?,)*))
+            }
+
+            def_try_join_ty_fn!($($ty),*);
+
+            impl<$($ty,)*> Watch for ($($ty,)*)
+            where
+                $($ty: Watch + Send,)*
+                $($ty::Ty: Send,)*
+            {
+                type Ty = ($($ty::Ty,)*);
+
+                fn current(&self) -> Result<Self::Ty> {
+                    let ($($ty,)*) = self;
+                    let ($($ty,)*) = ($($ty.current()?,)*);
+                    Ok(($($ty,)*))
+                }
+
+                fn current_optional(&self) -> Result<Option<Self::Ty>> {
+                    let ($($ty,)*) = self;
+                    let ($($ty,)*) = ($($ty.current_optional()?,)*);
+                    Ok(unwrap_option_tuple($($ty,)*))
+                }
+
+                async fn wait(&mut self) -> Result<Self::Ty> {
+                    let ($($ty,)*) = self;
+                    let ($($ty,)*) = ($($ty.wait(),)*);
+                    try_join_ty($($ty),*).await
+                }
+
+                async fn wait_optional(&mut self) -> Result<Option<Self::Ty>> {
+                    let ($($ty,)*) = self;
+                    let ($($ty,)*) = ($($ty.wait_optional(),)*);
+                    let ($($ty,)*) = try_join_ty($($ty),*).await?;
+                    Ok(unwrap_option_tuple($($ty,)*))
+                }
+
+                async fn wait_always(&mut self) -> Result<Self::Ty> {
+                    let ($($ty,)*) = self;
+                    let ($($ty,)*) = ($($ty.wait_always(),)*);
+                    try_join_ty($($ty),*).await
+                }
+
+                async fn changed(&mut self) -> Result<()> {
+                    use std::pin::pin;
+                    use std::task::Poll;
+
+                    let ($($ty,)*) = self;
+                    let ($($ty,)*) = ($($ty.changed(),)*);
+                    let ($(mut $ty,)*) = ($(pin!($ty),)*);
+
+                    std::future::poll_fn(|cx| {
+                        $(
+                            if let Poll::Ready(res) = $ty.as_mut().poll(cx) {
+                                return Poll::Ready(res);
+                            }
+                        )*
+                        Poll::Pending
+                    }).await
+                }
+            }
+        };
+    };
+}
+
+macro_rules! def_try_join_ty_fn {
+    ($($ty:ident),*) => {
+        async fn try_join_ty<$($ty,)* E>($($ty: $ty,)*) -> Result<($($ty::Ok,)*), E>
         where
-            $($ty: Watch + Send,)*
-            $($ty::Ty: Send,)*
+            $($ty: $crate::macros::TryFuture<Err = E>,)*
         {
-            type Ty = ($($ty::Ty,)*);
+            use std::pin::pin;
+            use std::task::Poll;
+            use $crate::macros::TryFuture;
 
-            fn current(&self) -> Result<Self::Ty> {
-                let ($($ty,)*) = self;
-                let ($($ty,)*) = ($($ty.current()?,)*);
-                Ok(($($ty,)*))
-            }
+            let ($($ty,)*) = ($($crate::macros::TryMaybeDone::new($ty),)*);
+            let ($(mut $ty,)*) = ($(pin!($ty),)*);
 
-            fn current_optional(&self) -> Result<Option<Self::Ty>> {
-                fn unwrap_option_tuple<$($ty,)*>($($ty: Option<$ty>,)*) -> Option<($($ty,)*)> {
-                    Some(($($ty?,)*))
-                }
+            std::future::poll_fn(|cx| {
+                let mut done = true;
 
-                let ($($ty,)*) = self;
-                let ($($ty,)*) = ($($ty.current_optional()?,)*);
-                Ok(unwrap_option_tuple($($ty,)*))
-            }
+                $(
+                    match $ty.as_mut().try_poll(cx) {
+                        Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
+                        poll => done &= poll.is_ready(),
+                    }
+                )*
 
-            async fn wait(&mut self) -> Result<Self::Ty> {
-                let ($($ty,)*) = self;
-                tokio::try_join!($($ty.wait(),)*)
-            }
-
-            async fn wait_optional(&mut self) -> Result<Option<Self::Ty>> {
-                fn unwrap_option_tuple<$($ty,)*>($($ty: Option<$ty>,)*) -> Option<($($ty,)*)> {
-                    Some(($($ty?,)*))
-                }
-
-                let ($($ty,)*) = self;
-                let ($($ty,)*) = tokio::try_join!($($ty.wait_optional(),)*)?;
-                Ok(unwrap_option_tuple($($ty,)*))
-            }
-
-            async fn wait_always(&mut self) -> Result<Self::Ty> {
-                let ($($ty,)*) = self;
-                tokio::try_join!($($ty.wait_always(),)*)
-            }
-
-            async fn changed(&mut self) -> Result<()> {
-                use std::pin::pin;
-                use std::task::Poll;
-
-                let ($($ty,)*) = self;
-                let ($($ty,)*) = ($($ty.changed(),)*);
-                let ($(mut $ty,)*) = ($(pin!($ty),)*);
-
-                std::future::poll_fn(|cx| {
-                    $(
-                        if let Poll::Ready(res) = $ty.as_mut().poll(cx) {
-                            return Poll::Ready(res);
-                        }
-                    )*
+                if done {
+                    Poll::Ready(Ok((
+                        $({
+                            $ty.as_mut()
+                                .take_output()
+                                .expect("expected completed future")
+                        },)*
+                    )))
+                } else {
                     Poll::Pending
-                }).await
-            }
+                }
+            }).await
         }
     };
 }
 
-impl_watch_tuple!(T1);
-impl_watch_tuple!(T1, T2);
-impl_watch_tuple!(T1, T2, T3);
-impl_watch_tuple!(T1, T2, T3, T4);
-impl_watch_tuple!(T1, T2, T3, T4, T5);
-impl_watch_tuple!(T1, T2, T3, T4, T5, T6);
-// impl_watch_tuple!(T1, T2, T3, T4, T5, T6, T7);
-// impl_watch_tuple!(T1, T2, T3, T4, T5, T6, T7, T8);
-// impl_watch_tuple!(T1, T2, T3, T4, T5, T6, T7, T8, T9);
-// impl_watch_tuple!(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10);
-// impl_watch_tuple!(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11);
-// impl_watch_tuple!(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12);
-// impl_watch_tuple!(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13);
-// impl_watch_tuple!(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14);
-// impl_watch_tuple!(
-//     T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15
-// );
-// impl_watch_tuple!(
-//     T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16
-// );
+apply_tuples!(impl_watch_tuple);
