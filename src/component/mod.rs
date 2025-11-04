@@ -8,27 +8,41 @@ use crate::result::{ResolutionError, Result};
 mod constructor;
 pub use constructor::{AsyncConstructor, AsyncConstructorTask, Constructor, ConstructorTask};
 
-/// A trait for types that may consists of multiple component.
-pub trait Composite<I>: Sized {
+/// A component or aggregate of components that can be watched for its values from an injector.
+pub trait WatchFrom<I>: Sized {
+    /// The watch returned by [`watch_from`](Self::watch_from) method.
     type Watch: Watch<Ty = Self>;
-
-    /// Tells the injector that the components that make up this type might be injected to it.
-    fn promise_to(injector: &I);
-
-    /// Injects the components that make up this type to the injector.
-    fn inject_to(result: Result<Self>, injector: &I);
 
     /// Watches for values of components that make up this types from the injector.
     fn watch_from(injector: &I) -> Self::Watch;
 }
 
-impl<I, T> Composite<I> for Arc<T>
+/// A component or aggregate of components that can be injected into an injector.
+pub trait InjectTo<I>: Sized {
+    /// Tells the injector that the components that make up this type might be injected to it.
+    fn promise_to(injector: &I);
+
+    /// Injects the components that make up this type to the injector.
+    fn inject_to(result: Result<Self>, injector: &I);
+}
+
+impl<I, T> WatchFrom<I> for Arc<T>
 where
     I: Injector,
     T: ?Sized + Send + Sync + 'static,
 {
     type Watch = I::Watch<Self>;
 
+    fn watch_from(injector: &I) -> Self::Watch {
+        injector.watch()
+    }
+}
+
+impl<I, T> InjectTo<I> for Arc<T>
+where
+    I: Injector,
+    T: ?Sized + Send + Sync + 'static,
+{
     fn promise_to(injector: &I) {
         injector.define::<Self>();
     }
@@ -36,29 +50,27 @@ where
     fn inject_to(result: Result<Self>, injector: &I) {
         injector.inject(result);
     }
-
-    fn watch_from(injector: &I) -> Self::Watch {
-        injector.watch()
-    }
 }
-
-/// A wrapper to make any type implement [`Composite`].
-#[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Component<T>(pub T);
 
 // We can assume that injectors always have `()` unit component, so injecting `()` into any
 // injector is no-op and watching for `()` always immediately return `Ok(())`.
-impl<I> Composite<I> for () {
+impl<I> WatchFrom<I> for () {
     type Watch = ();
-
-    fn promise_to(_injector: &I) {}
-
-    fn inject_to(_result: Result<Self>, _injector: &I) {}
 
     fn watch_from(_injector: &I) -> Self::Watch {}
 }
 
-impl<I, T> Composite<I> for Component<T>
+impl<I> InjectTo<I> for () {
+    fn promise_to(_injector: &I) {}
+
+    fn inject_to(_result: Result<Self>, _injector: &I) {}
+}
+
+/// A wrapper around a single component type.
+#[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Component<T>(pub T);
+
+impl<I, T> WatchFrom<I> for Component<T>
 where
     I: Injector,
     T: Clone + Send + Sync + 'static,
@@ -66,6 +78,17 @@ where
 {
     type Watch = ComponentWatch<I::Watch<T>>;
 
+    fn watch_from(injector: &I) -> Self::Watch {
+        ComponentWatch::new(injector.watch())
+    }
+}
+
+impl<I, T> InjectTo<I> for Component<T>
+where
+    I: Injector,
+    T: Clone + Send + Sync + 'static,
+    I::Watch<T>: Send,
+{
     fn promise_to(injector: &I) {
         injector.define::<T>();
     }
@@ -73,19 +96,24 @@ where
     fn inject_to(result: Result<Self>, injector: &I) {
         injector.inject(result.map(|v| v.0));
     }
-
-    fn watch_from(injector: &I) -> Self::Watch {
-        ComponentWatch::new(injector.watch())
-    }
 }
 
-impl<I, T> Composite<I> for Option<T>
+impl<I, T> WatchFrom<I> for Option<T>
 where
-    T: Composite<I> + Clone + Send + Sync + 'static,
+    T: WatchFrom<I> + Clone + Send + Sync + 'static,
     T::Watch: Send,
 {
     type Watch = OptionalWatch<T::Watch>;
 
+    fn watch_from(injector: &I) -> Self::Watch {
+        OptionalWatch::new(T::watch_from(injector))
+    }
+}
+
+impl<I, T> InjectTo<I> for Option<T>
+where
+    T: InjectTo<I> + Clone + Send + Sync + 'static,
+{
     fn promise_to(injector: &I) {
         T::promise_to(injector);
     }
@@ -96,29 +124,30 @@ where
             injector,
         );
     }
-
-    fn watch_from(injector: &I) -> Self::Watch {
-        OptionalWatch::new(T::watch_from(injector))
-    }
 }
 
-impl<I, T> Composite<I> for Result<T>
+impl<I, T> WatchFrom<I> for Result<T>
 where
-    T: Composite<I> + Clone + Send + Sync + 'static,
+    T: WatchFrom<I> + Clone + Send + Sync + 'static,
     T::Watch: Send,
 {
     type Watch = ResultWatch<T::Watch>;
 
+    fn watch_from(injector: &I) -> Self::Watch {
+        ResultWatch::new(T::watch_from(injector))
+    }
+}
+
+impl<I, T> InjectTo<I> for Result<T>
+where
+    T: InjectTo<I> + Clone + Send + Sync + 'static,
+{
     fn promise_to(injector: &I) {
         T::promise_to(injector);
     }
 
     fn inject_to(result: Result<Self>, injector: &I) {
         T::inject_to(result.flatten(), injector);
-    }
-
-    fn watch_from(injector: &I) -> Self::Watch {
-        ResultWatch::new(T::watch_from(injector))
     }
 }
 
@@ -129,20 +158,12 @@ where
 #[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Current<T>(pub T);
 
-impl<I, T> Composite<I> for Current<T>
+impl<I, T> WatchFrom<I> for Current<T>
 where
-    T: Composite<I>,
+    T: WatchFrom<I>,
     T::Watch: Send,
 {
     type Watch = CurrentWatch<T::Watch>;
-
-    fn promise_to(injector: &I) {
-        T::promise_to(injector);
-    }
-
-    fn inject_to(result: Result<Self>, injector: &I) {
-        T::inject_to(result.map(|v| v.0), injector);
-    }
 
     fn watch_from(injector: &I) -> Self::Watch {
         CurrentWatch::new(T::watch_from(injector))
@@ -155,14 +176,28 @@ macro_rules! impl_composite_tuple {
         #[allow(clippy::too_many_arguments)]
         #[allow(clippy::type_complexity)]
         #[allow(clippy::redundant_clone)]
-        impl<I, $($ty,)*> Composite<I> for ($($ty,)*)
+        impl<I, $($ty,)*> WatchFrom<I> for ($($ty,)*)
         where
             I: Injector,
-            $($ty: Composite<I> + Clone + Send + Sync + 'static,)*
+            $($ty: WatchFrom<I> + Clone + Send + Sync + 'static,)*
             $($ty::Watch: Send,)*
         {
             type Watch = ($($ty::Watch,)*);
 
+            fn watch_from(injector: &I) -> Self::Watch {
+                ($($ty::watch_from(injector),)*)
+            }
+        }
+
+        #[allow(non_snake_case)]
+        #[allow(clippy::too_many_arguments)]
+        #[allow(clippy::type_complexity)]
+        #[allow(clippy::redundant_clone)]
+        impl<I, $($ty,)*> InjectTo<I> for ($($ty,)*)
+        where
+            I: Injector,
+            $($ty: InjectTo<I> + Clone + Send + Sync + 'static,)*
+        {
             fn promise_to(injector: &I) {
                 $($ty::promise_to(injector);)*
             }
@@ -176,10 +211,6 @@ macro_rules! impl_composite_tuple {
                         $($ty::inject_to(Err(err.clone()), injector);)*
                     }
                 }
-            }
-
-            fn watch_from(injector: &I) -> Self::Watch {
-                ($($ty::watch_from(injector),)*)
             }
         }
     }

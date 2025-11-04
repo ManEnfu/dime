@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 use std::pin::Pin;
 
-use crate::component::Composite;
+use crate::component::{InjectTo, WatchFrom};
 use crate::injector::{Injector, InjectorTask, Watch};
 use crate::result::Result;
 
@@ -14,7 +14,6 @@ pub trait Constructor<T> {
     fn construct(self, param: T) -> Self::Constructed;
 }
 
-#[allow(non_snake_case)]
 impl<F, O> Constructor<()> for F
 where
     F: FnOnce() -> O,
@@ -57,7 +56,6 @@ pub trait AsyncConstructor<T> {
     fn construct(self, param: T) -> Self::Future;
 }
 
-#[allow(non_snake_case)]
 impl<F, Fut> AsyncConstructor<()> for F
 where
     F: FnOnce() -> Fut,
@@ -122,10 +120,10 @@ pub struct AsyncConstructorTask<C, T> {
 impl<I, C, T> InjectorTask<I> for ConstructorTask<C, T>
 where
     I: Injector + Clone + Send + 'static,
-    T: Composite<I> + Send,
+    T: WatchFrom<I> + Send,
     T::Watch: Send + 'static,
     C: Constructor<T> + Clone + Send + Sync + 'static,
-    C::Constructed: Composite<I>,
+    C::Constructed: InjectTo<I>,
 {
     type Future = Pin<Box<dyn Future<Output = Result<()>> + Send>>;
 
@@ -164,10 +162,10 @@ where
 impl<I, C, T> InjectorTask<I> for AsyncConstructorTask<C, T>
 where
     I: Injector + Clone + Send + 'static,
-    T: Composite<I> + Send,
+    T: WatchFrom<I> + Send,
     T::Watch: Send + 'static,
     C: AsyncConstructor<T> + Clone + Send + Sync + 'static,
-    C::Constructed: Composite<I>,
+    C::Constructed: InjectTo<I>,
     C::Future: Send,
 {
     type Future = Pin<Box<dyn Future<Output = Result<()>> + Send>>;

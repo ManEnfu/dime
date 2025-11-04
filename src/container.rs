@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use crate::component::{
-    AsyncConstructor, AsyncConstructorTask, Component, Composite, Constructor, ConstructorTask,
+    AsyncConstructor, AsyncConstructorTask, Component, Constructor, ConstructorTask, InjectTo,
+    WatchFrom,
 };
 use crate::injector::{Injector, InjectorTask, InjectorTaskObject, StateMap};
 use crate::runtime::Runtime;
@@ -127,10 +128,10 @@ where
     #[must_use]
     pub fn with_constructor<C, T>(mut self, constructor: C) -> Self
     where
-        T: Composite<I> + Send + 'static,
+        T: WatchFrom<I> + Send + 'static,
         T::Watch: Send + 'static,
         C: Constructor<T> + Clone + Send + Sync + 'static,
-        C::Constructed: Composite<I>,
+        C::Constructed: InjectTo<I>,
     {
         let task = ConstructorTask::new(constructor);
         self.tasks.push(InjectorTaskObject::from_boxed_future(task));
@@ -141,10 +142,10 @@ where
     #[must_use]
     pub fn with_async_constructor<C, T>(mut self, constructor: C) -> Self
     where
-        T: Composite<I> + Send + 'static,
+        T: WatchFrom<I> + Send + 'static,
         T::Watch: Send + 'static,
         C: AsyncConstructor<T> + Clone + Send + Sync + 'static,
-        C::Constructed: Composite<I>,
+        C::Constructed: InjectTo<I>,
         C::Future: Send,
     {
         let task = AsyncConstructorTask::new(constructor);
