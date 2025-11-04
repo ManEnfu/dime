@@ -15,7 +15,7 @@ use crate::result::Result;
 ///
 /// ```
 /// use std::sync::Arc;
-/// use std::sync::atomic::{AtomicBool, Ordering};
+/// # use std::sync::atomic::{AtomicBool, Ordering};
 /// # use std::time::Duration;
 /// #
 /// # use tokio::time::timeout;
@@ -25,39 +25,46 @@ use crate::result::Result;
 ///
 /// # const TIMEOUT: Duration = Duration::from_millis(500);
 /// #
-/// # #[derive(Clone, Debug, Default, PartialEq, Eq)]
-/// # struct Address(&'static str);
-/// #
-/// # #[derive(Clone, Debug)]
-/// # struct Database(Arc<DatabaseInner>);
+/// #[derive(Clone, Debug, Default, PartialEq, Eq)]
+/// struct Address(&'static str);
+///
+/// #[derive(Clone, Debug)]
+/// struct Database {
+///     // ...
+/// #    inner: Arc<DatabaseInner>
+/// }
 /// #
 /// # #[derive(Debug)]
 /// # struct DatabaseInner {
 /// #     address: Address,
 /// #     connected: AtomicBool,
 /// # }
-/// #
-/// # impl Database {
-/// #     fn connect(address: Address) -> Self {
-/// #         Self(Arc::new(DatabaseInner {
+///
+/// impl Database {
+///     fn connect(address: Address) -> Self {
+///         // ...
+/// #         Self{ inner: Arc::new(DatabaseInner {
 /// #             address,
 /// #             connected: AtomicBool::new(true),
-/// #         }))
-/// #     }
-/// #
-/// #     fn address(&self) -> &Address {
-/// #         &self.0.address
-/// #     }
-/// #
-/// #     fn disconnect(&self) {
-/// #         self.0.connected.store(false, Ordering::Relaxed);
-/// #     }
-/// #
-/// #     fn is_connected(&self) -> bool {
-/// #         self.0.connected.load(Ordering::Relaxed)
-/// #     }
-/// # }
-/// #
+/// #         })}
+///     }
+///
+///     fn address(&self) -> &Address {
+///         // ...
+/// #         &self.inner.address
+///     }
+///
+///     fn disconnect(&self) {
+///         // ...
+/// #         self.inner.connected.store(false, Ordering::Relaxed);
+///     }
+///
+///     fn is_connected(&self) -> bool {
+///         // ...
+/// #         self.inner.connected.load(Ordering::Relaxed)
+///     }
+/// }
+///
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 /// let injector = Arc::new(StateMap::new());

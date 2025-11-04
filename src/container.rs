@@ -6,12 +6,80 @@ use crate::component::{
 use crate::injector::{Injector, InjectorTask, InjectorTaskObject, StateMap};
 use crate::runtime::Runtime;
 
+/// A simple container of injected components.
+///
+/// # Example
+///
+/// ```
+/// # use std::sync::Arc;
+/// # use std::sync::atomic::{AtomicBool, Ordering};
+/// # use std::time::Duration;
+/// #
+/// # use tokio::time::timeout;
+/// #
+/// use dime::component::Component;
+/// use dime::container::SimpleContainer;
+/// use dime::injector::Watch;
+/// use dime::runtime::TokioRuntime;
+/// # use dime::result::ResolutionError;
+///
+/// # const TIMEOUT: Duration = Duration::from_millis(500);
+/// #
+/// #[derive(Clone, Debug, Default, PartialEq, Eq)]
+/// struct Address(&'static str);
+///
+/// #[derive(Clone, Debug)]
+/// struct Database {
+///     // ...
+/// #    inner: Arc<DatabaseInner>
+/// }
+/// #
+/// # #[derive(Debug)]
+/// # struct DatabaseInner {
+/// #     address: Address,
+/// #     connected: AtomicBool,
+/// # }
+///
+/// impl Database {
+///     fn connect(address: Address) -> Self {
+///         // ...
+/// #         Self{ inner: Arc::new(DatabaseInner {
+/// #             address,
+/// #             connected: AtomicBool::new(true),
+/// #         })}
+///     }
+///
+///     fn address(&self) -> &Address {
+///         // ...
+/// #         &self.inner.address
+///     }
+/// }
+///
+/// # #[tokio::main]
+/// # async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+/// let container = SimpleContainer::builder(TokioRuntime::new())
+///     .with_constructor(|Component(address): Component<Address>| {
+///         Component(Database::connect(address))
+///     })
+///     .with_component(Address("foo"))
+///     .build();
+///
+/// let mut watch_db = container.watch::<Database>();
+/// # let db = timeout(TIMEOUT, async {
+/// let db = watch_db.wait_always().await?;
+/// # Ok::<Database, ResolutionError>(db)
+/// # }).await??;
+/// assert_eq!(db.address(), &Address("foo"));
+/// # Ok(())
+/// # }
+/// ```
 pub struct SimpleContainer<R, I = Arc<StateMap>> {
     #[expect(dead_code)]
     rt: R,
     injector: I,
 }
 
+/// A builder for [`SimpleContainer`]
 pub struct SimpleContainerBuilder<R, I = Arc<StateMap>> {
     rt: R,
     injector: I,
@@ -19,6 +87,7 @@ pub struct SimpleContainerBuilder<R, I = Arc<StateMap>> {
 }
 
 impl<R> SimpleContainer<R> {
+    /// Returns a new builder for `SimpleContainer`.
     #[must_use]
     pub fn builder(rt: R) -> SimpleContainerBuilder<R> {
         SimpleContainerBuilder {
@@ -34,6 +103,7 @@ where
     R: Runtime,
     I: Injector + Clone + Send + 'static,
 {
+    /// Registers an [`InjectorTask`] to be run on the underlying injector of the container.
     #[must_use]
     pub fn with_task<T>(mut self, task: T) -> Self
     where
@@ -43,6 +113,7 @@ where
         self
     }
 
+    /// Registers a component to the container.
     #[must_use]
     pub fn with_component<T>(self, component: T) -> Self
     where
@@ -52,6 +123,7 @@ where
         self.with_constructor(|| Component(component))
     }
 
+    /// Registers a component constructor to the container.
     #[must_use]
     pub fn with_constructor<C, T>(mut self, constructor: C) -> Self
     where
@@ -65,6 +137,7 @@ where
         self
     }
 
+    /// Registers an async component constructor to the container.
     #[must_use]
     pub fn with_async_constructor<C, T>(mut self, constructor: C) -> Self
     where
@@ -79,6 +152,9 @@ where
         self
     }
 
+    /// Finalizes the building process and returns the built container.
+    ///
+    /// This will spawn the registered tasks on the underlying injector of the container.
     #[must_use]
     pub fn build(self) -> SimpleContainer<R, I> {
         let Self {
@@ -101,6 +177,7 @@ where
     R: Runtime,
     I: Injector,
 {
+    /// Watches for values of a component type in the container.
     pub fn watch<T>(&self) -> I::Watch<T>
     where
         T: Clone + Send + Sync + 'static,
