@@ -27,6 +27,16 @@ impl Inner {
             false
         }
     }
+
+    fn is_ready_and<F>(&self, f: F) -> bool
+    where
+        F: FnOnce(&Result<Erased>) -> bool,
+    {
+        match self {
+            Self::Ready(result) => f(result),
+            _ => false,
+        }
+    }
 }
 
 /// A state of a given type in [`Injector`](crate::injector::Injector).
@@ -160,7 +170,9 @@ impl RawWatch {
 
     pub(crate) async fn wait_always(&mut self) -> Result<Erased> {
         self.inner
-            .wait_for(|state| matches!(state, Inner::Ready(_)))
+            .wait_for(|state| {
+                state.is_ready_and(|result| !matches!(result, Err(err) if err.is_not_defined()))
+            })
             .await
             .map_err(ResolutionError::other)
             .and_then(|state| match &*state {
