@@ -170,6 +170,36 @@ where
     }
 }
 
+#[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct WaitAlways<T>(pub T);
+
+impl<I, T> WatchFrom<I> for WaitAlways<T>
+where
+    T: WatchFrom<I>,
+    T::Watch: Send,
+{
+    type Watch = WaitAlwaysWatch<T::Watch>;
+
+    fn watch_from(injector: &I) -> Self::Watch {
+        WaitAlwaysWatch::new(T::watch_from(injector))
+    }
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct WaitOk<T>(pub T);
+
+impl<I, T> WatchFrom<I> for WaitOk<T>
+where
+    T: WatchFrom<I>,
+    T::Watch: Send,
+{
+    type Watch = WaitOkWatch<T::Watch>;
+
+    fn watch_from(injector: &I) -> Self::Watch {
+        WaitOkWatch::new(T::watch_from(injector))
+    }
+}
+
 macro_rules! impl_composite_tuple {
     ($($ty:ident),*) => {
         #[allow(non_snake_case)]
@@ -225,13 +255,8 @@ pub struct ComponentWatch<W>(W);
 
 impl<W> ComponentWatch<W> {
     /// Wraps a watch in a new `OptionalWatch`
-    pub const fn new(watch: W) -> Self {
+    pub(crate) const fn new(watch: W) -> Self {
         Self(watch)
-    }
-
-    /// Extract the underlying watch from `self`.
-    pub fn into_inner(self) -> W {
-        self.0
     }
 }
 
@@ -275,13 +300,8 @@ pub struct OptionalWatch<W>(W);
 
 impl<W> OptionalWatch<W> {
     /// Wraps a watch in a new `OptionalWatch`
-    pub const fn new(watch: W) -> Self {
+    pub(crate) const fn new(watch: W) -> Self {
         Self(watch)
-    }
-
-    /// Extract the underlying watch from `self`.
-    pub fn into_inner(self) -> W {
-        self.0
     }
 }
 
@@ -323,13 +343,8 @@ pub struct ResultWatch<W>(W);
 
 impl<W> ResultWatch<W> {
     /// Wraps a watch in a new `ResultWatch`
-    pub const fn new(watch: W) -> Self {
+    pub(crate) const fn new(watch: W) -> Self {
         Self(watch)
-    }
-
-    /// Extract the underlying watch from `self`.
-    pub fn into_inner(self) -> W {
-        self.0
     }
 }
 
@@ -370,14 +385,9 @@ where
 pub struct CurrentWatch<W>(W);
 
 impl<W> CurrentWatch<W> {
-    /// Wraps a watch in a new `InhibitChangedWatch`
-    pub const fn new(watch: W) -> Self {
+    /// Wraps a watch in a new `CurrentWatch`
+    pub(crate) const fn new(watch: W) -> Self {
         Self(watch)
-    }
-
-    /// Extract the underlying watch from `self`.
-    pub fn into_inner(self) -> W {
-        self.0
     }
 }
 
@@ -411,5 +421,95 @@ where
 
     fn changed(&mut self) -> impl Future<Output = Result<()>> + Send {
         std::future::pending()
+    }
+}
+
+/// Watches over [`WaitAlways`] values.
+#[doc(hidden)]
+#[derive(Debug, Default, Clone)]
+pub struct WaitAlwaysWatch<W>(W);
+
+impl<W> WaitAlwaysWatch<W> {
+    /// Wraps a watch in a new `WaitAlwaysWatch`
+    pub(crate) const fn new(watch: W) -> Self {
+        Self(watch)
+    }
+}
+
+impl<W> Watch for WaitAlwaysWatch<W>
+where
+    W: Watch + Send,
+{
+    type Ty = WaitAlways<W::Ty>;
+
+    fn current(&self) -> Result<Self::Ty> {
+        self.0.current().map(WaitAlways)
+    }
+
+    fn current_optional(&self) -> Result<Option<Self::Ty>> {
+        let value = self.0.current_optional()?;
+        Ok(value.map(WaitAlways))
+    }
+
+    async fn wait(&mut self) -> Result<Self::Ty> {
+        self.0.wait_always().await.map(WaitAlways)
+    }
+
+    async fn wait_optional(&mut self) -> Result<Option<Self::Ty>> {
+        let value = self.0.wait_always().await?;
+        Ok(Some(WaitAlways(value)))
+    }
+
+    async fn wait_always(&mut self) -> Result<Self::Ty> {
+        self.0.wait_always().await.map(WaitAlways)
+    }
+
+    async fn changed(&mut self) -> Result<()> {
+        self.0.changed().await
+    }
+}
+
+/// Watches over [`WaitOk`] values.
+#[doc(hidden)]
+#[derive(Debug, Default, Clone)]
+pub struct WaitOkWatch<W>(W);
+
+impl<W> WaitOkWatch<W> {
+    /// Wraps a watch in a new `WaitOkWatch`
+    pub(crate) const fn new(watch: W) -> Self {
+        Self(watch)
+    }
+}
+
+impl<W> Watch for WaitOkWatch<W>
+where
+    W: Watch + Send,
+{
+    type Ty = WaitOk<W::Ty>;
+
+    fn current(&self) -> Result<Self::Ty> {
+        self.0.current().map(WaitOk)
+    }
+
+    fn current_optional(&self) -> Result<Option<Self::Ty>> {
+        let value = self.0.current_optional()?;
+        Ok(value.map(WaitOk))
+    }
+
+    async fn wait(&mut self) -> Result<Self::Ty> {
+        self.0.wait_always().await.map(WaitOk)
+    }
+
+    async fn wait_optional(&mut self) -> Result<Option<Self::Ty>> {
+        let value = self.0.wait_always().await?;
+        Ok(Some(WaitOk(value)))
+    }
+
+    async fn wait_always(&mut self) -> Result<Self::Ty> {
+        self.0.wait_always().await.map(WaitOk)
+    }
+
+    async fn changed(&mut self) -> Result<()> {
+        self.0.changed().await
     }
 }
