@@ -181,6 +181,17 @@ impl RawWatch {
             })
     }
 
+    pub(crate) async fn wait_ok(&mut self) -> Result<Erased> {
+        self.inner
+            .wait_for(|state| state.is_ready_and(Result::is_ok))
+            .await
+            .map_err(ResolutionError::other)
+            .and_then(|state| match &*state {
+                Inner::Ready(Ok(value)) => Ok(value.clone()),
+                _ => unreachable!(),
+            })
+    }
+
     pub(crate) async fn changed(&mut self) -> Result<()> {
         self.inner.changed().await.map_err(ResolutionError::other)?;
 
@@ -340,6 +351,13 @@ where
     async fn wait_always(&mut self) -> Result<T> {
         self.raw
             .wait_always()
+            .await
+            .map(|value| value.downcast::<T>().unwrap())
+    }
+
+    async fn wait_ok(&mut self) -> Result<Self::Ty> {
+        self.raw
+            .wait_ok()
             .await
             .map(|value| value.downcast::<T>().unwrap())
     }

@@ -170,6 +170,7 @@ where
     }
 }
 
+/// Waits until the result of this component's evaluation is available.
 #[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct WaitAlways<T>(pub T);
 
@@ -185,6 +186,7 @@ where
     }
 }
 
+/// Waits until the `Ok` value of this component's is available.
 #[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct WaitOk<T>(pub T);
 
@@ -288,6 +290,10 @@ where
         self.0.wait_always().await.map(Component)
     }
 
+    async fn wait_ok(&mut self) -> Result<Self::Ty> {
+        self.0.wait_ok().await.map(Component)
+    }
+
     async fn changed(&mut self) -> Result<()> {
         self.0.changed().await
     }
@@ -329,6 +335,10 @@ where
 
     async fn wait_always(&mut self) -> Result<Self::Ty> {
         Ok(Some(self.0.wait_always().await?))
+    }
+
+    async fn wait_ok(&mut self) -> Result<Self::Ty> {
+        Ok(Some(self.0.wait_ok().await?))
     }
 
     async fn changed(&mut self) -> Result<()> {
@@ -374,6 +384,10 @@ where
         Ok(self.0.wait_always().await)
     }
 
+    async fn wait_ok(&mut self) -> Result<Self::Ty> {
+        Ok(self.0.wait_ok().await)
+    }
+
     async fn changed(&mut self) -> Result<()> {
         self.0.changed().await
     }
@@ -416,6 +430,10 @@ where
     }
 
     async fn wait_always(&mut self) -> Result<Self::Ty> {
+        self.0.current().map(Current)
+    }
+
+    async fn wait_ok(&mut self) -> Result<Self::Ty> {
         self.0.current().map(Current)
     }
 
@@ -464,6 +482,10 @@ where
         self.0.wait_always().await.map(WaitAlways)
     }
 
+    async fn wait_ok(&mut self) -> Result<Self::Ty> {
+        self.0.wait_ok().await.map(WaitAlways)
+    }
+
     async fn changed(&mut self) -> Result<()> {
         self.0.changed().await
     }
@@ -507,6 +529,10 @@ where
 
     async fn wait_always(&mut self) -> Result<Self::Ty> {
         self.0.wait_always().await.map(WaitOk)
+    }
+
+    async fn wait_ok(&mut self) -> Result<Self::Ty> {
+        self.0.wait_ok().await.map(WaitOk)
     }
 
     async fn changed(&mut self) -> Result<()> {

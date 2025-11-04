@@ -43,14 +43,24 @@ pub trait Watch {
     /// of the value returned an error.
     fn wait_optional(&mut self) -> impl Future<Output = Result<Option<Self::Ty>>> + Send;
 
-    /// Waits until a value of type `T` is available regardless if the injector is promised such
-    /// value.
+    /// Waits until a result value of type `T` is available regardless if the injector is promised
+    /// such value.
     ///
     /// # Errors
     ///
     /// This method returns [`ResolutionError`](crate::result::ResolutionError) if the evaluation
     /// of the value returned an error.
     fn wait_always(&mut self) -> impl Future<Output = Result<Self::Ty>> + Send;
+
+    /// Waits until a value of type `T` is successfully created (e.g. by injecting `Ok(value)`
+    /// to the injector), regardless if the injector is promised such value.
+    ///
+    /// # Errors
+    ///
+    /// While this method ensures that the value stored in the injector is of `Ok` variant, it is
+    /// still necessary to account for another unexpected error caused by the internals of the
+    /// injector itself.
+    fn wait_ok(&mut self) -> impl Future<Output = Result<Self::Ty>> + Send;
 
     /// Waits until the value of type `T` changes.
     ///
@@ -82,6 +92,10 @@ impl Watch for () {
     }
 
     async fn wait_always(&mut self) -> Result<Self::Ty> {
+        Ok(())
+    }
+
+    async fn wait_ok(&mut self) -> Result<Self::Ty> {
         Ok(())
     }
 
@@ -137,6 +151,12 @@ macro_rules! impl_watch_tuple {
                 async fn wait_always(&mut self) -> Result<Self::Ty> {
                     let ($($ty,)*) = self;
                     let ($($ty,)*) = ($($ty.wait_always(),)*);
+                    try_join_ty($($ty),*).await
+                }
+
+                async fn wait_ok(&mut self) -> Result<Self::Ty> {
+                    let ($($ty,)*) = self;
+                    let ($($ty,)*) = ($($ty.wait_ok(),)*);
                     try_join_ty($($ty),*).await
                 }
 
