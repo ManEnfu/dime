@@ -1,6 +1,9 @@
 use std::marker::PhantomData;
 use std::pin::Pin;
 
+#[cfg(feature = "tracing")]
+use tracing::{Instrument, field};
+
 use crate::component::{InjectTo, WatchFrom};
 use crate::injector::{Injector, InjectorTask, Watch};
 use crate::result::Result;
@@ -130,19 +133,44 @@ where
     fn run(self, injector: I) -> Self::Future {
         C::Constructed::promise_to(&injector);
 
-        Box::pin(async move {
+        let fut = async move {
             let mut watch = T::watch_from(&injector);
+            trace!("start task");
 
             loop {
                 let input: Result<T> = watch.wait().await;
-                let output: Result<C::Constructed> = match input {
-                    Ok(input) => Ok(self.constructor.clone().construct(input)),
-                    Err(err) => Err(err),
-                };
-                C::Constructed::inject_to(output, &injector);
-                watch.changed().await?;
+                trace!(error = input.as_ref().err().map(field::display), "waited");
+
+                {
+                    let output: Result<C::Constructed> = match input {
+                        Ok(input) => Ok(self.constructor.clone().construct(input)),
+                        Err(err) => Err(err),
+                    };
+                    trace!(
+                        error = output.as_ref().err().map(tracing::field::display),
+                        "constructed"
+                    );
+
+                    C::Constructed::inject_to(output, &injector);
+                }
+
+                #[cfg_attr(not(feature = "tracing"), allow(unused_variables))]
+                watch
+                    .changed()
+                    .await
+                    .inspect_err(|error| error!(%error, "error while waiting for change"))?;
+                trace!("changed");
             }
-        })
+        };
+
+        #[cfg(feature = "tracing")]
+        let fut = fut.instrument(tracing::debug_span!(
+            "constructor_task",
+            dependency = std::any::type_name::<T>(),
+            constructed = std::any::type_name::<C::Constructed>(),
+        ));
+
+        Box::pin(fut)
     }
 }
 
@@ -173,19 +201,44 @@ where
     fn run(self, injector: I) -> Self::Future {
         C::Constructed::promise_to(&injector);
 
-        Box::pin(async move {
+        let fut = async move {
             let mut watch = T::watch_from(&injector);
+            trace!("start task");
 
             loop {
                 let input: Result<T> = watch.wait().await;
-                let output: Result<C::Constructed> = match input {
-                    Ok(input) => Ok(self.constructor.clone().construct(input).await),
-                    Err(err) => Err(err),
-                };
-                C::Constructed::inject_to(output, &injector);
-                watch.changed().await?;
+                trace!(error = input.as_ref().err().map(field::display), "waited");
+
+                {
+                    let output: Result<C::Constructed> = match input {
+                        Ok(input) => Ok(self.constructor.clone().construct(input).await),
+                        Err(err) => Err(err),
+                    };
+                    trace!(
+                        error = output.as_ref().err().map(tracing::field::display),
+                        "constructed"
+                    );
+
+                    C::Constructed::inject_to(output, &injector);
+                }
+
+                #[cfg_attr(not(feature = "tracing"), allow(unused_variables))]
+                watch
+                    .changed()
+                    .await
+                    .inspect_err(|error| error!(%error, "error while waiting for change"))?;
+                trace!("changed");
             }
-        })
+        };
+
+        #[cfg(feature = "tracing")]
+        let fut = fut.instrument(tracing::debug_span!(
+            "async_constructor_task",
+            dependency = std::any::type_name::<T>(),
+            constructed = std::any::type_name::<C::Constructed>(),
+        ));
+
+        Box::pin(fut)
     }
 }
 

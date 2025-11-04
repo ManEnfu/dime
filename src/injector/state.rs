@@ -236,12 +236,18 @@ where
     /// Tells the state a type might be injected to it.
     #[inline]
     pub fn define(&self) {
+        trace!("type" = type_name::<T>(), "define");
         self.raw.define();
     }
 
     /// Injects a value into the state.
     #[inline]
     pub fn inject(&self, value: Result<T>) {
+        trace!(
+            "type" = type_name::<T>(),
+            error = value.as_ref().err().map(tracing::field::debug),
+            "inject"
+        );
         self.raw.inject(value.map(Erased::new));
     }
 
@@ -280,12 +286,18 @@ where
     /// Tells the state a type might be injected to it.
     #[inline]
     pub fn define(&self) {
+        trace!("type" = type_name::<T>(), "define");
         self.raw.define();
     }
 
     /// Injects a value into the state.
     #[inline]
     pub fn inject(&self, value: Result<T>) {
+        trace!(
+            "type" = type_name::<T>(),
+            error = value.as_ref().err().map(tracing::field::debug),
+            "inject"
+        );
         self.raw.inject(value.map(Erased::new));
     }
 
@@ -335,6 +347,7 @@ where
     }
 
     async fn wait(&mut self) -> Result<T> {
+        trace!("type" = type_name::<T>(), "wait");
         self.raw
             .wait()
             .await
@@ -342,6 +355,7 @@ where
     }
 
     async fn wait_optional(&mut self) -> Result<Option<T>> {
+        trace!("type" = type_name::<T>(), "wait_optional");
         self.raw
             .wait_optional()
             .await
@@ -349,6 +363,7 @@ where
     }
 
     async fn wait_always(&mut self) -> Result<T> {
+        trace!("type" = type_name::<T>(), "wait_always");
         self.raw
             .wait_always()
             .await
@@ -356,6 +371,7 @@ where
     }
 
     async fn wait_ok(&mut self) -> Result<Self::Ty> {
+        trace!("type" = type_name::<T>(), "wait_ok");
         self.raw
             .wait_ok()
             .await
@@ -363,6 +379,7 @@ where
     }
 
     async fn changed(&mut self) -> Result<()> {
+        trace!("type" = type_name::<T>(), "wait_changed");
         self.raw.changed().await
     }
 }
