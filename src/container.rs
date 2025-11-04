@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::component::{
-    AsyncConstructor, AsyncConstructorTask, Composite, Constructor, ConstructorTask,
+    AsyncConstructor, AsyncConstructorTask, Component, Composite, Constructor, ConstructorTask,
 };
 use crate::injector::{Injector, InjectorTask, InjectorTaskObject, StateMap};
 use crate::runtime::Runtime;
@@ -12,21 +12,18 @@ pub struct SimpleContainer<R, I = Arc<StateMap>> {
     injector: I,
 }
 
-pub struct SimpleContainerBuilder<R, I> {
+pub struct SimpleContainerBuilder<R, I = Arc<StateMap>> {
     rt: R,
     injector: I,
     tasks: Vec<InjectorTaskObject<I>>,
 }
 
-impl<R, I> SimpleContainer<R, I>
-where
-    I: Default,
-{
+impl<R> SimpleContainer<R> {
     #[must_use]
-    pub fn builder(rt: R) -> SimpleContainerBuilder<R, I> {
+    pub fn builder(rt: R) -> SimpleContainerBuilder<R> {
         SimpleContainerBuilder {
             rt,
-            injector: I::default(),
+            injector: Arc::default(),
             tasks: Vec::new(),
         }
     }
@@ -38,7 +35,7 @@ where
     I: Injector + Clone + Send + 'static,
 {
     #[must_use]
-    pub fn register_task<T>(mut self, task: T) -> Self
+    pub fn with_task<T>(mut self, task: T) -> Self
     where
         T: InjectorTask<I> + Send + 'static,
     {
@@ -47,7 +44,16 @@ where
     }
 
     #[must_use]
-    pub fn register_constructor<C, T>(mut self, constructor: C) -> Self
+    pub fn with_component<T>(self, component: T) -> Self
+    where
+        T: Clone + Send + Sync + 'static,
+        I::Watch<T>: Send,
+    {
+        self.with_constructor(|| Component(component))
+    }
+
+    #[must_use]
+    pub fn with_constructor<C, T>(mut self, constructor: C) -> Self
     where
         T: Composite<I> + Send + 'static,
         T::Watch: Send + 'static,
@@ -60,7 +66,7 @@ where
     }
 
     #[must_use]
-    pub fn register_async_constructor<C, T>(mut self, constructor: C) -> Self
+    pub fn with_async_constructor<C, T>(mut self, constructor: C) -> Self
     where
         T: Composite<I> + Send + 'static,
         T::Watch: Send + 'static,
@@ -83,7 +89,7 @@ where
 
         for task in tasks {
             let cloned = injector.clone();
-            rt.spawn(async move { task.run(&cloned).await });
+            rt.spawn(async move { task.run(cloned).await });
         }
 
         SimpleContainer { rt, injector }
@@ -111,7 +117,7 @@ mod tests {
 
     use tokio::time::timeout;
 
-    use crate::component::Component;
+    use crate::component::{Component, Current};
     use crate::runtime::TokioRuntime;
 
     use crate::injector::Watch;
@@ -154,23 +160,47 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_inject_db() {
-        fn connect_db(address: Component<Address>) -> Component<Database> {
-            Component(Database::connect(address.0))
-        }
+    async fn test_db_constructor() {
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<Address>(2);
 
-        timeout(TIMEOUT, async {
-            let container: SimpleContainer<TokioRuntime, Arc<StateMap>> =
-                SimpleContainer::builder(TokioRuntime::new())
-                    .register_constructor(|| Component(Address("foo")))
-                    .register_constructor(connect_db)
-                    .build();
+        let container = SimpleContainer::builder(TokioRuntime::new())
+            .with_task(async move |injector: Arc<StateMap>| {
+                injector.define::<Address>();
+                loop {
+                    if let Some(address) = rx.recv().await {
+                        injector.inject(Ok(address));
+                    }
+                }
+            })
+            .with_constructor(
+                |Component(address): Component<Address>,
+                 Current(old_db): Current<Option<Component<Database>>>| {
+                    if let Some(Component(db)) = old_db {
+                        db.disconnect();
+                    }
 
-            let mut watch_db = container.watch::<Database>();
-            let db = watch_db.wait_always().await.unwrap();
-            assert_eq!(db.address(), &Address("foo"));
+                    Component(Database::connect(address))
+                },
+            )
+            .build();
+
+        let mut watch_db = container.watch::<Database>();
+
+        tx.send(Address("foo")).await.unwrap();
+        let db1 = timeout(TIMEOUT, async { watch_db.wait_always().await.unwrap() })
+            .await
+            .unwrap();
+        assert_eq!(db1.address(), &Address("foo"));
+        assert!(db1.is_connected());
+
+        tx.send(Address("bar")).await.unwrap();
+        let db2 = timeout(TIMEOUT, async {
+            watch_db.changed().await.unwrap();
+            watch_db.wait_always().await.unwrap()
         })
         .await
         .unwrap();
+        assert_eq!(db2.address(), &Address("bar"));
+        assert!(!db1.is_connected());
     }
 }
