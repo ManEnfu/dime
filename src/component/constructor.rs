@@ -129,9 +129,7 @@ where
 {
     type Future = Pin<Box<dyn Future<Output = Result<()>> + Send>>;
 
-    fn run(self, injector: &I) -> Self::Future {
-        let injector = injector.clone();
-
+    fn run(self, injector: I) -> Self::Future {
         Box::pin(async move {
             C::Constructed::promise_to(&injector);
             let mut watch = T::watch_from(&injector);
@@ -173,9 +171,7 @@ where
 {
     type Future = Pin<Box<dyn Future<Output = Result<()>> + Send>>;
 
-    fn run(self, injector: &I) -> Self::Future {
-        let injector = injector.clone();
-
+    fn run(self, injector: I) -> Self::Future {
         Box::pin(async move {
             C::Constructed::promise_to(&injector);
             let mut watch = T::watch_from(&injector);

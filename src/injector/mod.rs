@@ -113,18 +113,18 @@ pub trait InjectorTask<I> {
     /// The semantics of the error returned by this method may vary between implementations, but
     /// in the most common case, this method will return an error if the underlying task encounters
     /// an unexpected error, panicks, or is otherwise unable to continue in any way.
-    fn run(self, injector: &I) -> Self::Future;
+    fn run(self, injector: I) -> Self::Future;
 }
 
 impl<I, F, Fut> InjectorTask<I> for F
 where
-    F: FnOnce(&I) -> Fut,
+    F: FnOnce(I) -> Fut,
     Fut: Future<Output = Result<()>> + Send + 'static,
 {
     type Future = Fut;
 
     #[inline]
-    fn run(self, injector: &I) -> Self::Future {
+    fn run(self, injector: I) -> Self::Future {
         self(injector)
     }
 }
@@ -136,7 +136,7 @@ pub struct InjectorTaskObject<I> {
     // We don't store `InjectorTask` trait object here, as `run` method is non-dispatchable,
     // using boxed `FnOnce` allow us to consume the boxed value when calling `run`.
     #[allow(clippy::type_complexity)]
-    boxed: Box<dyn FnOnce(&I) -> Pin<Box<dyn Future<Output = Result<()>> + Send>> + Send>,
+    boxed: Box<dyn FnOnce(I) -> Pin<Box<dyn Future<Output = Result<()>> + Send>> + Send>,
     concrete_type: &'static str,
 }
 
@@ -147,7 +147,7 @@ impl<I> InjectorTaskObject<I> {
         T: InjectorTask<I> + Send + 'static,
         T::Future: Send + 'static,
     {
-        let wrapped_fn = |injector: &I| {
+        let wrapped_fn = |injector: I| {
             Box::pin(task.run(injector)) as Pin<Box<dyn Future<Output = Result<()>> + Send>>
         };
 
@@ -166,7 +166,7 @@ impl<I> InjectorTaskObject<I> {
         T: InjectorTask<I> + Send + 'static,
         T::Future: Into<Pin<Box<dyn Future<Output = Result<()>> + Send>>>,
     {
-        let wrapped_fn = |injector: &I| task.run(injector).into();
+        let wrapped_fn = |injector: I| task.run(injector).into();
 
         Self {
             boxed: Box::new(wrapped_fn),
@@ -187,7 +187,7 @@ impl<I> InjectorTask<I> for InjectorTaskObject<I> {
     type Future = Pin<Box<dyn Future<Output = Result<()>> + Send>>;
 
     #[inline]
-    fn run(self, injector: &I) -> Self::Future {
+    fn run(self, injector: I) -> Self::Future {
         self.boxed.run(injector)
     }
 }
