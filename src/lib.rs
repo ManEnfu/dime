@@ -11,7 +11,6 @@ pub(crate) mod macros;
 
 mod dyn_clone;
 pub mod erased;
-pub mod store;
 
 pub mod result;
 
