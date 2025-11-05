@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use crate::injector::{Injector, Watch};
-use crate::result::{ResolutionError, Result};
+use crate::result::Result;
 
 mod constructor;
 pub use constructor::{AsyncConstructor, AsyncConstructorTask, Constructor, ConstructorTask};
@@ -119,10 +119,11 @@ where
     }
 
     fn inject_to(result: Result<Self>, injector: &I) {
-        T::inject_to(
-            result.and_then(|v| v.ok_or_else(|| ResolutionError::not_defined::<T>())),
-            injector,
-        );
+        match result {
+            Ok(Some(value)) => T::inject_to(Ok(value), injector),
+            Ok(None) => {}
+            Err(err) => T::inject_to(Err(err), injector),
+        }
     }
 }
 
