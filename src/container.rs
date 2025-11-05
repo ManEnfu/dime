@@ -4,7 +4,8 @@ use crate::component::{
     AsyncConstructor, AsyncConstructorTask, Component, Constructor, ConstructorTask, InjectTo,
     WatchFrom,
 };
-use crate::injector::{Injector, InjectorTask, InjectorTaskObject, StateMap};
+use crate::injector::{Injector, InjectorTask, InjectorTaskObject, StateMap, Watch};
+use crate::result::Result;
 use crate::runtime::Runtime;
 
 /// A simple container of injected components.
@@ -184,6 +185,40 @@ where
         T: Clone + Send + Sync + 'static,
     {
         self.injector.watch()
+    }
+
+    /// Calls a function using component dependencies as its arguments.
+    ///
+    /// # Errors
+    ///
+    /// This method might encounter an error while waiting on the required components, in which
+    /// case it will return the error.
+    pub async fn call<F, T>(&self, f: F) -> Result<F::Constructed>
+    where
+        I: Sync,
+        T: WatchFrom<I>,
+        F: Constructor<T>,
+    {
+        let mut watch = T::watch_from(&self.injector);
+        let input = watch.wait().await?;
+        Ok(f.construct(input))
+    }
+
+    /// Calls an asynchronous function using component dependencies as its arguments.
+    ///
+    /// # Errors
+    ///
+    /// This method might encounter an error while waiting on the required components, in which
+    /// case it will return the error.
+    pub async fn call_async<F, T>(&self, f: F) -> Result<F::Constructed>
+    where
+        I: Sync,
+        T: WatchFrom<I>,
+        F: AsyncConstructor<T>,
+    {
+        let mut watch = T::watch_from(&self.injector);
+        let input = watch.wait().await?;
+        Ok(f.construct(input).await)
     }
 }
 

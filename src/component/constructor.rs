@@ -114,12 +114,6 @@ where
     }
 }
 
-/// A adapter for [`AsyncConstructor`] types so that it implements [`InjectorTask`].
-pub struct AsyncConstructorTask<C, T> {
-    constructor: C,
-    _marker: PhantomData<fn() -> T>,
-}
-
 impl<I, C, T> InjectorTask<I> for ConstructorTask<C, T>
 where
     I: Injector + Clone + Send + 'static,
@@ -172,6 +166,12 @@ where
 
         Box::pin(fut)
     }
+}
+
+/// A adapter for [`AsyncConstructor`] types so that it implements [`InjectorTask`].
+pub struct AsyncConstructorTask<C, T> {
+    constructor: C,
+    _marker: PhantomData<fn() -> T>,
 }
 
 impl<C, T> AsyncConstructorTask<C, T>
