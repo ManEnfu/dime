@@ -2,8 +2,8 @@
 
 use std::sync::Arc;
 
+use crate::Result;
 use crate::injector::{Injector, Watch};
-use crate::result::Result;
 
 mod constructor;
 pub use constructor::{AsyncConstructor, AsyncConstructorTask, Constructor, ConstructorTask};

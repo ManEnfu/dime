@@ -4,9 +4,9 @@ use std::pin::Pin;
 #[cfg(feature = "tracing")]
 use tracing::{Instrument, field};
 
+use crate::Result;
 use crate::component::{InjectTo, WatchFrom};
 use crate::injector::{Injector, InjectorTask, Watch};
-use crate::result::Result;
 
 /// Constructs a component from smaller components.
 pub trait Constructor<T> {

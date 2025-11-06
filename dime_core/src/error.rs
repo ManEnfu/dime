@@ -1,28 +1,28 @@
-use std::{
-    any::{self, TypeId},
-    error::Error,
-    sync::Arc,
-};
+//! Error types.
 
-/// [`ResolutionError`] is an error that can be raised by functions and methods from this library.
+use std::any::{TypeId, type_name};
+use std::error::Error as StdError;
+use std::sync::Arc;
+
+/// [`Error`] is an error that can be raised by functions and methods from this library.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
-pub enum ResolutionError {
+pub enum Error {
     NotDefined(TypeId, &'static str),
-    Other(Arc<dyn Error + Send + Sync + 'static>),
+    Other(Arc<dyn StdError + Send + Sync + 'static>),
 }
 
-impl ResolutionError {
+impl Error {
     pub fn not_defined<T>() -> Self
     where
         T: 'static,
     {
-        Self::NotDefined(TypeId::of::<T>(), any::type_name::<T>())
+        Self::NotDefined(TypeId::of::<T>(), type_name::<T>())
     }
 
     pub fn other<E>(err: E) -> Self
     where
-        E: Into<Box<dyn Error + Send + Sync>>,
+        E: Into<Box<dyn StdError + Send + Sync>>,
     {
         Self::Other(Arc::from(err.into()))
     }
@@ -43,7 +43,7 @@ impl ResolutionError {
     }
 }
 
-impl std::fmt::Display for ResolutionError {
+impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::NotDefined(_, type_name) => {
@@ -54,8 +54,8 @@ impl std::fmt::Display for ResolutionError {
     }
 }
 
-impl std::error::Error for ResolutionError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
+impl StdError for Error {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match self {
             Self::Other(error) => Some(error),
             _ => None,
@@ -63,6 +63,6 @@ impl std::error::Error for ResolutionError {
     }
 }
 
-/// [`Result`] is an alias to [`core::result::Result`] with [`ResolutionError`] as the
+/// [`Result`] is an alias to [`core::result::Result`] with [`Error`] as the
 /// default error type.
-pub type Result<T, E = ResolutionError> = core::result::Result<T, E>;
+pub type Result<T, E = Error> = core::result::Result<T, E>;

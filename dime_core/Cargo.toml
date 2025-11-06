@@ -1,0 +1,7 @@
+[package]
+name = "dime_core"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+pin-project-lite = { version = "0.2" }

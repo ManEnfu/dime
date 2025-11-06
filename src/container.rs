@@ -1,11 +1,13 @@
+//! Container types.
+
 use std::sync::Arc;
 
+use crate::Result;
 use crate::component::{
     AsyncConstructor, AsyncConstructorTask, Component, Constructor, ConstructorTask, InjectTo,
     WatchFrom,
 };
 use crate::injector::{Injector, InjectorTask, InjectorTaskObject, StateMap, Watch};
-use crate::result::Result;
 use crate::runtime::Runtime;
 
 /// A simple container of injected components.
@@ -22,8 +24,8 @@ use crate::runtime::Runtime;
 /// use dime::component::Component;
 /// use dime::container::SimpleContainer;
 /// use dime::injector::Watch;
-/// use dime::runtime::TokioRuntime;
-/// # use dime::result::ResolutionError;
+/// use dime::tokio::TokioRuntime;
+/// # use dime::Error;
 ///
 /// # const TIMEOUT: Duration = Duration::from_millis(500);
 /// #
@@ -69,7 +71,7 @@ use crate::runtime::Runtime;
 /// let mut watch_db = container.watch::<Database>();
 /// # let db = timeout(TIMEOUT, async {
 /// let db = watch_db.wait_always().await?;
-/// # Ok::<Database, ResolutionError>(db)
+/// # Ok::<Database, Error>(db)
 /// # }).await??;
 /// assert_eq!(db.address(), &Address("foo"));
 /// # Ok(())
@@ -231,7 +233,7 @@ mod tests {
     use tokio::time::timeout;
 
     use crate::component::{Component, Current};
-    use crate::runtime::TokioRuntime;
+    use crate::tokio::TokioRuntime;
 
     use crate::injector::Watch;
 

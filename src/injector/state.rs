@@ -5,10 +5,7 @@ use std::marker::PhantomData;
 
 use tokio::sync::watch;
 
-use crate::{
-    erased::Erased,
-    result::{ResolutionError, Result},
-};
+use crate::{Erased, Error, Result};
 
 #[derive(Clone, Debug, Default)]
 enum Inner {
@@ -131,7 +128,7 @@ impl RawWatch {
     pub(crate) fn current(&self) -> Result<Erased> {
         match &*self.inner.borrow() {
             Inner::Undefined | Inner::Pending => {
-                Err(ResolutionError::NotDefined(self.type_id, self.type_name))
+                Err(Error::NotDefined(self.type_id, self.type_name))
             }
             Inner::Ready(erased) => erased.clone(),
         }
@@ -148,9 +145,9 @@ impl RawWatch {
         self.inner
             .wait_for(|state| !matches!(state, Inner::Pending))
             .await
-            .map_err(ResolutionError::other)
+            .map_err(Error::other)
             .and_then(|state| match &*state {
-                Inner::Undefined => Err(ResolutionError::NotDefined(self.type_id, self.type_name)),
+                Inner::Undefined => Err(Error::NotDefined(self.type_id, self.type_name)),
                 Inner::Pending => unreachable!(),
                 Inner::Ready(result) => result.clone(),
             })
@@ -160,7 +157,7 @@ impl RawWatch {
         self.inner
             .wait_for(|state| !matches!(state, Inner::Pending))
             .await
-            .map_err(ResolutionError::other)
+            .map_err(Error::other)
             .and_then(|state| match &*state {
                 Inner::Undefined => Ok(None),
                 Inner::Pending => unreachable!(),
@@ -174,7 +171,7 @@ impl RawWatch {
                 state.is_ready_and(|result| !matches!(result, Err(err) if err.is_not_defined()))
             })
             .await
-            .map_err(ResolutionError::other)
+            .map_err(Error::other)
             .and_then(|state| match &*state {
                 Inner::Ready(result) => result.clone(),
                 _ => unreachable!(),
@@ -185,7 +182,7 @@ impl RawWatch {
         self.inner
             .wait_for(|state| state.is_ready_and(Result::is_ok))
             .await
-            .map_err(ResolutionError::other)
+            .map_err(Error::other)
             .and_then(|state| match &*state {
                 Inner::Ready(Ok(value)) => Ok(value.clone()),
                 _ => unreachable!(),
@@ -193,7 +190,7 @@ impl RawWatch {
     }
 
     pub(crate) async fn changed(&mut self) -> Result<()> {
-        self.inner.changed().await.map_err(ResolutionError::other)?;
+        self.inner.changed().await.map_err(Error::other)?;
 
         Ok(())
     }
@@ -328,7 +325,7 @@ where
     }
 }
 
-impl<T> super::watch::Watch for Watch<T>
+impl<T> crate::injector::Watch for Watch<T>
 where
     T: 'static + Send,
 {

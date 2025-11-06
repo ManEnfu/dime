@@ -48,9 +48,16 @@ checksum = "2fd1289c04a9ea8cb22300a459a72a385d7c73d3259e2ed7dcb2af674838cfa9"
 name = "dime"
 version = "0.1.0"
 dependencies = [
- "pin-project-lite",
+ "dime_core",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "dime_core"
+version = "0.1.0"
+dependencies = [
+ "pin-project-lite",
 ]
 
 [[package]]

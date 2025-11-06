@@ -2,9 +2,9 @@ use std::any::{TypeId, type_name};
 use std::collections::BTreeMap;
 use std::sync::RwLock;
 
-use crate::injector::state::{RawState, RawWatch, StateRef, Watch};
-use crate::injector::{Injector, state};
-use crate::result::Result;
+use crate::Result;
+use crate::injector::Injector;
+use crate::injector::state::{self, RawState, RawWatch, StateRef, Watch};
 
 /// A Simple injector backed by [`BTreeMap`].
 ///
@@ -21,7 +21,7 @@ use crate::result::Result;
 /// # use tokio::time::timeout;
 ///
 /// use dime::injector::{StateMap, Injector, Watch};
-/// use dime::result::ResolutionError;
+/// use dime::Error;
 ///
 /// # const TIMEOUT: Duration = Duration::from_millis(500);
 /// #
@@ -107,7 +107,7 @@ use crate::result::Result;
 ///         watch_address.changed().await?;
 ///     }
 ///
-///     Ok::<(), ResolutionError>(())
+///     Ok::<(), Error>(())
 /// });
 ///
 /// // Inject a "foo" database address. The injector will return a database connected to "foo".
@@ -115,7 +115,7 @@ use crate::result::Result;
 /// # let db1 = timeout(TIMEOUT, async {
 /// watch_db.changed().await?;
 /// let db1 = watch_db.wait().await?;
-/// # Ok::<Database, ResolutionError>(db1)
+/// # Ok::<Database, Error>(db1)
 /// # })
 /// # .await??;
 /// assert_eq!(db1.address(), &Address("foo"));
@@ -127,7 +127,7 @@ use crate::result::Result;
 /// # let db2 = timeout(TIMEOUT, async {
 /// watch_db.changed().await?;
 /// let db2 = watch_db.wait().await?;
-/// # Ok::<Database, ResolutionError>(db2)
+/// # Ok::<Database, Error>(db2)
 /// # })
 /// # .await??;
 /// assert_eq!(db2.address(), &Address("bar"));
@@ -282,8 +282,8 @@ mod tests {
 
     use tokio::time::timeout;
 
+    use crate::Error;
     use crate::injector::Watch;
-    use crate::result::ResolutionError;
 
     use super::*;
 
@@ -382,7 +382,7 @@ mod tests {
         assert_eq!(db2.address(), &Address("bar"));
         assert!(!db1.is_connected());
 
-        injector.inject::<Address>(Err(ResolutionError::other("something went wrong")));
+        injector.inject::<Address>(Err(Error::other("something went wrong")));
         let err = timeout(TIMEOUT, async {
             watch_db.changed().await.unwrap();
             watch_db.wait().await.unwrap_err()
