@@ -1,0 +1,20 @@
+[package]
+name = "dime"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+dime_core = { path = "../dime_core" }
+tokio = { version = "1.47", default-features = false, features = ["sync"] }
+tracing = { version = "0.1", optional = true, default-features = false, features = ["std"] }
+
+[features]
+default = []
+tracing = ["dep:tracing"]
+
+[dev-dependencies]
+dime_util = { path = "../dime_util", features = ["tokio"] }
+tokio = { version = "1.47", features = ["macros", "rt", "rt-multi-thread", "test-util", "time"] }
+
+[package.metadata.docs.rs]
+all-features = true
