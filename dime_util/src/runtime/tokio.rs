@@ -1,4 +1,4 @@
-use crate::runtime::{Runtime, Task};
+use dime_core::runtime::{Runtime, Task};
 
 /// A `tokio` runtime.
 #[derive(Clone, Default, Debug)]

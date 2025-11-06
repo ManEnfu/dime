@@ -150,7 +150,7 @@
 //! use dime::component::{Component as C, WaitAlways};
 //! use dime::container::SimpleContainer;
 //! use dime::injector::StateMap;
-//! use dime::tokio::TokioRuntime;
+//! use dime_util::runtime::TokioRuntime;
 //!
 //! # #[derive(Clone, Debug, Default, PartialEq, Eq)]
 //! # struct Address(&'static str);
@@ -356,6 +356,3 @@ pub use dime_core::{Erased, Error, Injector, Result, Runtime, erased, error, run
 pub mod component;
 pub mod container;
 pub mod injector;
-
-#[cfg(any(feature = "tokio", test))]
-pub mod tokio;

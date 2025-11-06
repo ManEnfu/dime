@@ -1,0 +1,15 @@
+[package]
+name = "dime_util"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+dime_core = { path = "../dime_core" }
+tokio = { version = "1.47", default-features = false, optional = true }
+
+[features]
+default = []
+tokio = ["dep:tokio", "tokio/rt"]
+
+[package.metadata.docs.rs]
+all-features = true

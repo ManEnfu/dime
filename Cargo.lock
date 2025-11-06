@@ -49,6 +49,7 @@ name = "dime"
 version = "0.1.0"
 dependencies = [
  "dime_core",
+ "dime_util",
  "tokio",
  "tracing",
 ]
@@ -58,6 +59,14 @@ name = "dime_core"
 version = "0.1.0"
 dependencies = [
  "pin-project-lite",
+]
+
+[[package]]
+name = "dime_util"
+version = "0.1.0"
+dependencies = [
+ "dime_core",
+ "tokio",
 ]
 
 [[package]]

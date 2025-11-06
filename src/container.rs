@@ -24,7 +24,7 @@ use crate::runtime::Runtime;
 /// use dime::component::Component;
 /// use dime::container::SimpleContainer;
 /// use dime::injector::Watch;
-/// use dime::tokio::TokioRuntime;
+/// use dime_util::runtime::TokioRuntime;
 /// # use dime::Error;
 ///
 /// # const TIMEOUT: Duration = Duration::from_millis(500);
@@ -232,9 +232,9 @@ mod tests {
 
     use tokio::time::timeout;
 
-    use crate::component::{Component, Current};
-    use crate::tokio::TokioRuntime;
+    use dime_util::runtime::TokioRuntime;
 
+    use crate::component::{Component, Current};
     use crate::injector::Watch;
 
     use super::*;
