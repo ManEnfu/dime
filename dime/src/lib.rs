@@ -295,22 +295,25 @@
 //!         Arc::new(DatabaseImpl::connect(address).await) as Arc<dyn Database>
 //!     })
 //!     // ... or you can write custom code around the inner injector using `InjectorTask`!
-//!     .with_task(async |injector: Arc<StateMap>| {
+//!     .with_task(|injector: Arc<StateMap>| {
 //!         use dime::injector::{Injector, Watch};
 //!
 //!         injector.define::<Application>();
-//!         let mut watch_service = injector.watch::<Service>();
-//!         let mut watch_logger = injector.watch::<Logger>();
 //!
-//!         loop {
-//!             let app = tokio::try_join!(watch_service.wait(), watch_logger.wait())
-//!                 .map(|(service, logger)| Application::new(service, logger));
-//!             injector.inject(app);
+//!         async move {
+//!             let mut watch_service = injector.watch::<Service>();
+//!             let mut watch_logger = injector.watch::<Logger>();
 //!
-//!             tokio::select! {
-//!                 res = watch_service.changed() => res,
-//!                 res = watch_logger.changed() => res,
+//!             loop {
+//!                 let app = tokio::try_join!(watch_service.wait(), watch_logger.wait())
+//!                     .map(|(service, logger)| Application::new(service, logger));
+//!                 injector.inject(app);
+//!
+//!                 tokio::select! {
+//!                     res = watch_service.changed() => res,
+//!                     res = watch_logger.changed() => res,
 //!             }?;
+//!         }
 //!         }
 //!     })
 //!     .build();
@@ -318,7 +321,7 @@
 //! // Call a function with a `Application` as argument, and the injector shall provide the
 //! // `Application` created by our constructors.
 //! container
-//!     .call_async(async |WaitAlways(C(app)): WaitAlways<C<Application>>| app.run().await)
+//!     .call_async(async |C(app): C<Application>| app.run().await)
 //!     .await??;
 //! #
 //! # let mut buf = Vec::<String>::with_capacity(4);

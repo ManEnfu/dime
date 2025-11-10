@@ -169,7 +169,7 @@ where
 
         for task in tasks {
             let cloned = injector.clone();
-            rt.spawn(async move { task.run(cloned).await });
+            rt.spawn(task.run(cloned));
         }
 
         SimpleContainer { rt, injector }
